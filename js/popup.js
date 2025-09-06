@@ -5,6 +5,8 @@
  */
 
 class PopupManager {
+    static isRefreshing = false; // Flag to prevent multiple simultaneous refreshes
+    
     /**
      * Store URL with enhanced validation and error handling
      * @param {boolean} domainOnly - Whether to store only domain
@@ -122,24 +124,212 @@ class PopupManager {
      * Refresh IP and update display
      */
     static async refreshIP() {
+        // Prevent multiple simultaneous refreshes
+        if (this.isRefreshing) {
+            console.log('⏳ Refresh already in progress, skipping...');
+            return;
+        }
+        
         try {
+            this.isRefreshing = true;
             this.showLoading(true);
+            console.log('🔄 Starting IP refresh...');
             
-            // Send refresh message to background
-            const response = await chrome.runtime.sendMessage({type: "refreshIP"});
+            // Send refresh message to background with timeout
+            const response = await Promise.race([
+                chrome.runtime.sendMessage({type: "refreshIP"}),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Message timeout')), 10000)
+                )
+            ]);
             
-            if (response.success) {
+            console.log('📨 Refresh response:', response);
+            
+            if (response && response.success) {
+                console.log('✅ IP refresh response successful:', response);
                 this.showMessage('IP refreshed successfully!', 'success');
                 // Update display
                 await this.updateIPDisplay();
+                console.log('✅ IP refresh completed successfully');
             } else {
-                throw new Error(response.error || 'Failed to refresh IP');
+                console.error('❌ IP refresh failed:', response);
+                throw new Error(response?.error || 'Failed to refresh IP');
             }
         } catch (error) {
-            console.error('Error refreshing IP:', error);
-            this.showMessage('Error refreshing IP', 'error');
+            console.error('❌ Error refreshing IP:', error);
+            this.showMessage(`Error refreshing IP: ${error.message}`, 'error');
         } finally {
+            this.isRefreshing = false;
             this.showLoading(false);
+        }
+    }
+
+
+    /**
+     * Clear proxy settings function
+     */
+    static async clearProxy() {
+        try {
+            console.log('🧹 Clearing proxy settings...');
+            
+            const response = await chrome.runtime.sendMessage({type: "clearProxy"});
+            console.log('📨 Clear proxy response:', response);
+            
+            if (response && response.success) {
+                this.showMessage('Proxy settings cleared!', 'success');
+            } else {
+                this.showMessage('Failed to clear proxy settings', 'error');
+            }
+        } catch (error) {
+            console.error('❌ Error clearing proxy:', error);
+            this.showMessage('Error clearing proxy settings', 'error');
+        }
+    }
+
+    /**
+     * Refresh browser function
+     */
+    static async refreshBrowser() {
+        try {
+            console.log('🔄 Refreshing browser...');
+            
+            // Get current tab
+            const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+            if (tabs[0]) {
+                await chrome.tabs.reload(tabs[0].id);
+                this.showMessage('Browser refreshed!', 'success');
+            } else {
+                this.showMessage('No active tab found', 'error');
+            }
+        } catch (error) {
+            console.error('❌ Error refreshing browser:', error);
+            this.showMessage('Error refreshing browser', 'error');
+        }
+    }
+
+    /**
+     * Restart browser function
+     */
+    static async restartBrowser() {
+        try {
+            console.log('🔄 Restarting browser...');
+            
+            // Clear proxy first
+            const response = await chrome.runtime.sendMessage({type: "clearProxy"});
+            if (response && response.success) {
+                this.showMessage('Proxy cleared! Please restart Chrome manually.', 'success');
+                
+                // Show detailed instructions
+                setTimeout(() => {
+                    this.showMessage('1. Close ALL Chrome windows', 'error');
+                }, 2000);
+                
+                setTimeout(() => {
+                    this.showMessage('2. Wait 5 seconds', 'error');
+                }, 4000);
+                
+                setTimeout(() => {
+                    this.showMessage('3. Reopen Chrome', 'error');
+                }, 6000);
+                
+                setTimeout(() => {
+                    this.showMessage('4. Go to binance.com', 'error');
+                }, 8000);
+            } else {
+                this.showMessage('Failed to clear proxy', 'error');
+            }
+        } catch (error) {
+            console.error('❌ Error restarting browser:', error);
+            this.showMessage('Error restarting browser', 'error');
+        }
+    }
+
+    /**
+     * Force restart function - nuclear option
+     */
+    static async forceRestart() {
+        try {
+            console.log('💥 Force restarting...');
+            
+            // Force clear proxy first
+            const response = await chrome.runtime.sendMessage({type: "forceClearProxy"});
+            if (response && response.success) {
+                this.showMessage('Proxy force cleared! Restarting...', 'success');
+                
+                // Show countdown
+                let countdown = 5;
+                const countdownInterval = setInterval(() => {
+                    this.showMessage(`Restarting in ${countdown}...`, 'error');
+                    countdown--;
+                    
+                    if (countdown <= 0) {
+                        clearInterval(countdownInterval);
+                        this.showMessage('Please close Chrome NOW!', 'error');
+                    }
+                }, 1000);
+                
+                // Force close all tabs after countdown
+                setTimeout(async () => {
+                    try {
+                        const tabs = await chrome.tabs.query({});
+                        for (const tab of tabs) {
+                            try {
+                                await chrome.tabs.remove(tab.id);
+                            } catch (e) {
+                                // Ignore errors
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore errors
+                    }
+                }, 6000);
+                
+            } else {
+                this.showMessage('Failed to force clear proxy', 'error');
+            }
+        } catch (error) {
+            console.error('❌ Error force restarting:', error);
+            this.showMessage('Error force restarting', 'error');
+        }
+    }
+
+    /**
+     * Manual clear function - step by step instructions
+     */
+    static async manualClear() {
+        try {
+            console.log('🔧 Manual clear...');
+            
+            this.showMessage('Manual Clear Instructions:', 'success');
+            
+            // Show step by step instructions
+            setTimeout(() => {
+                this.showMessage('1. Go to chrome://settings/', 'error');
+            }, 1000);
+            
+            setTimeout(() => {
+                this.showMessage('2. Click "Advanced" → "System"', 'error');
+            }, 3000);
+            
+            setTimeout(() => {
+                this.showMessage('3. Click "Open proxy settings"', 'error');
+            }, 5000);
+            
+            setTimeout(() => {
+                this.showMessage('4. Click "LAN settings"', 'error');
+            }, 7000);
+            
+            setTimeout(() => {
+                this.showMessage('5. Uncheck "Use proxy server"', 'error');
+            }, 9000);
+            
+            setTimeout(() => {
+                this.showMessage('6. Click OK and restart Chrome', 'error');
+            }, 11000);
+            
+        } catch (error) {
+            console.error('❌ Error manual clear:', error);
+            this.showMessage('Error manual clear', 'error');
         }
     }
 
@@ -148,20 +338,35 @@ class PopupManager {
      */
     static async updateIPDisplay() {
         try {
+            console.log('🔄 Updating IP display...');
+            
             // Get IP from storage directly
             const result = await chrome.storage.local.get(['current_ip', 'cachedIP']);
             const ip = result.current_ip || result.cachedIP;
             const ipElement = document.getElementById('current_ip');
+            
+            console.log('📋 Storage result:', result);
+            console.log('🔍 Extracted IP:', ip);
+            
             if (ipElement) {
+                const oldIP = ipElement.textContent;
                 ipElement.textContent = ip || 'Loading...';
-                console.log('✅ IP element updated with:', ip);
+                console.log(`✅ IP element updated: "${oldIP}" → "${ip}"`);
+                
+                // Add visual feedback for IP change
+                if (ip && oldIP !== ip && oldIP !== 'Loading...' && oldIP !== 'Error') {
+                    ipElement.style.backgroundColor = '#4CAF50';
+                    ipElement.style.color = 'white';
+                    setTimeout(() => {
+                        ipElement.style.backgroundColor = '#f0f0f0';
+                        ipElement.style.color = 'black';
+                    }, 2000);
+                }
             } else {
                 console.error('❌ IP element not found!');
             }
-            console.log('IP displayed:', ip);
-            console.log('Storage result:', result);
         } catch (error) {
-            console.error('Error updating IP display:', error);
+            console.error('❌ Error updating IP display:', error);
             const ipElement = document.getElementById('current_ip');
             if (ipElement) {
                 ipElement.textContent = 'Error';
@@ -176,7 +381,10 @@ class PopupManager {
         const countdownElement = document.getElementById('countdown');
         const statusElement = document.getElementById('ip_status_text');
         
-        if (!countdownElement || !statusElement) return;
+        if (!countdownElement || !statusElement) {
+            console.log('❌ Countdown elements not found');
+            return;
+        }
 
         chrome.storage.local.get(['last_ip_update', 'ipTimestamp'], (result) => {
             const lastUpdate = result.last_ip_update || result.ipTimestamp || 0;
@@ -185,10 +393,11 @@ class PopupManager {
             const updateInterval = 30 * 1000; // 30 seconds
             const timeUntilUpdate = updateInterval - timeSinceUpdate;
 
-            console.log('Countdown update:', {
+            console.log('⏰ Countdown update:', {
                 lastUpdate: new Date(lastUpdate).toLocaleTimeString(),
                 timeSinceUpdate: Math.floor(timeSinceUpdate / 1000) + 's',
                 timeUntilUpdate: Math.floor(timeUntilUpdate / 1000) + 's',
+                isRefreshing: this.isRefreshing,
                 storageKeys: result
             });
 
@@ -196,6 +405,14 @@ class PopupManager {
                 countdownElement.textContent = '00:00';
                 statusElement.textContent = 'Ready for update';
                 statusElement.style.color = '#ff9800';
+                
+                // Auto-refresh IP when countdown reaches zero (only if not already refreshing)
+                if (!this.isRefreshing) {
+                    console.log('⏰ Countdown reached zero, auto-refreshing IP...');
+                    this.refreshIP();
+                } else {
+                    console.log('⏰ Countdown reached zero but refresh already in progress');
+                }
             } else {
                 const minutes = Math.floor(timeUntilUpdate / 60000);
                 const seconds = Math.floor((timeUntilUpdate % 60000) / 1000);
@@ -216,6 +433,10 @@ class PopupManager {
             // Wait a bit for storage to be ready
             await new Promise(resolve => setTimeout(resolve, 100));
             
+            console.log('🔍 Initial popup setup - checking storage...');
+            const initialStorage = await chrome.storage.local.get(['current_ip', 'cachedIP', 'last_ip_update']);
+            console.log('📋 Initial storage:', initialStorage);
+            
             // Update IP display
             await this.updateIPDisplay();
             
@@ -227,6 +448,14 @@ class PopupManager {
                 this.updateCountdown();
             }, 1000);
             
+            // Set up periodic IP refresh (every 5 seconds)
+            setInterval(() => {
+                this.updateIPDisplay();
+            }, 5000);
+            
+            // Set up storage listener for real-time updates
+            this.setupStorageListener();
+            
             // Initialize event listeners
             this.initializeEventListeners();
             
@@ -236,6 +465,31 @@ class PopupManager {
             console.error('Error setting up popup:', error);
             this.showMessage('Error initializing popup', 'error');
         }
+    }
+
+    /**
+     * Set up storage listener for real-time updates
+     */
+    static setupStorageListener() {
+        console.log('🔧 Setting up storage listener...');
+        
+        chrome.storage.onChanged.addListener((changes, namespace) => {
+            console.log('📦 Storage changed:', changes);
+            
+            // Check if IP was updated
+            if (changes.current_ip || changes.cachedIP) {
+                console.log('🔄 IP updated in storage, refreshing display...');
+                this.updateIPDisplay();
+            }
+            
+            // Check if last update time changed
+            if (changes.last_ip_update || changes.ipTimestamp) {
+                console.log('⏰ Update time changed, refreshing countdown...');
+                this.updateCountdown();
+            }
+        });
+        
+        console.log('✅ Storage listener set up');
     }
 
     /**
@@ -318,6 +572,8 @@ class PopupManager {
                 this.refreshIP();
             });
         }
+
+        // No extra debug/control buttons
 
     }
 }

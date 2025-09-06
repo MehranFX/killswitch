@@ -21,9 +21,9 @@
 	   "tabs",
 	   "declarativeNetRequest",
 	   "webRequest",
-	   "webRequestBlocking",
 	   "webNavigation",
-	   "proxy"
+	   "proxy",
+	   "alarms"
 	],
 	"host_permissions": [
 		"<all_urls>"

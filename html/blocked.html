@@ -77,7 +77,9 @@
 </head>
 <body>
     <div class="container">
-        <div class="icon">🚫</div>
+        <div class="icon">
+            <img src="../img/icon-128x128-red.png" alt="Kill Switch" style="width: 80px; height: 80px;">
+        </div>
         <h1>Kill Switch - Access Blocked</h1>
         <p>This website has been blocked by Kill Switch extension based on your current IP address.</p>
         
@@ -100,14 +102,37 @@
         // Load current IP and blocked domain info
         async function loadCurrentIP() {
             try {
-                const response = await chrome.runtime.sendMessage({type: "refreshIP"});
-                if (response.success) {
-                    document.getElementById('currentIP').textContent = response.ip;
+                console.log('🔍 Loading current IP...');
+                
+                // Try to get from storage first
+                const result = await chrome.storage.local.get(['current_ip', 'cachedIP']);
+                const ip = result.current_ip || result.cachedIP;
+                
+                console.log('Storage result:', result);
+                
+                if (ip) {
+                    document.getElementById('currentIP').textContent = ip;
+                    console.log('✅ Loaded IP from storage:', ip);
                 } else {
-                    document.getElementById('currentIP').textContent = 'Unable to load';
+                    // Try to get from background script
+                    try {
+                        const response = await chrome.runtime.sendMessage({type: "getCurrentIP"});
+                        console.log('Get IP response:', response);
+                        
+                        if (response && response.success && response.ip) {
+                            document.getElementById('currentIP').textContent = response.ip;
+                            console.log('✅ Loaded IP from background:', response.ip);
+                        } else {
+                            document.getElementById('currentIP').textContent = 'Unable to load';
+                            console.log('❌ Failed to load IP from background');
+                        }
+                    } catch (messageError) {
+                        console.log('❌ Error sending message to background:', messageError);
+                        document.getElementById('currentIP').textContent = 'Unable to load';
+                    }
                 }
             } catch (error) {
-                console.error('Error loading IP:', error);
+                console.error('❌ Error loading IP:', error);
                 document.getElementById('currentIP').textContent = 'Error loading IP';
             }
         }
@@ -115,32 +140,88 @@
         // Load blocked domain info
         async function loadBlockedDomain() {
             try {
-                // Get current tab ID
-                const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-                const tabId = tabs[0]?.id;
+                console.log('🔍 Loading blocked domain...');
+                console.log('🔍 Current URL:', window.location.href);
+                console.log('🔍 Search params:', window.location.search);
                 
-                if (tabId) {
-                    // Try to get the blocked URL from storage
-                    const result = await chrome.storage.local.get([`blockedUrl_${tabId}`]);
-                    const blockedUrl = result[`blockedUrl_${tabId}`];
+                // First try to get from URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const domain = urlParams.get('domain');
+                console.log('🔍 Domain from URL params:', domain);
+                
+                if (domain) {
+                    document.getElementById('blockedDomain').textContent = domain;
+                    console.log('✅ Loaded domain from URL parameter:', domain);
+                    return;
+                }
+                
+                // Try to get from window.location.href as fallback
+                try {
+                    const currentUrl = new URL(window.location.href);
+                    const domainFromUrl = currentUrl.searchParams.get('domain');
+                    if (domainFromUrl) {
+                        document.getElementById('blockedDomain').textContent = domainFromUrl;
+                        console.log('✅ Loaded domain from window.location:', domainFromUrl);
+                        return;
+                    }
+                } catch (urlError) {
+                    console.log('❌ Error parsing window.location:', urlError);
+                }
+                
+                // Try to get from referrer
+                const referrer = document.referrer;
+                console.log('Referrer:', referrer);
+                
+                if (referrer && referrer !== '') {
+                    try {
+                        const url = new URL(referrer);
+                        document.getElementById('blockedDomain').textContent = url.hostname;
+                        console.log('✅ Loaded domain from referrer:', url.hostname);
+                        return;
+                    } catch (e) {
+                        console.log('❌ Invalid referrer URL:', referrer);
+                    }
+                }
+                
+                // Fallback: try to get from storage
+                try {
+                    const storage = await chrome.storage.local.get(null);
+                    console.log('Storage keys:', Object.keys(storage));
+                    
+                    let blockedUrl = null;
+                    for (const key in storage) {
+                        if (key.startsWith('blockedUrl_')) {
+                            blockedUrl = storage[key];
+                            console.log('Found blocked URL in storage:', blockedUrl);
+                            break;
+                        }
+                    }
                     
                     if (blockedUrl) {
                         try {
                             const url = new URL(blockedUrl);
                             document.getElementById('blockedDomain').textContent = url.hostname;
-                            console.log('Loaded blocked domain from storage:', url.hostname);
+                            console.log('✅ Loaded domain from storage:', url.hostname);
                         } catch (urlError) {
-                            document.getElementById('blockedDomain').textContent = blockedUrl;
+                            // If it's not a valid URL, try to extract domain from string
+                            const domainMatch = blockedUrl.match(/(?:https?:\/\/)?(?:www\.)?([^\/\?]+)/);
+                            if (domainMatch) {
+                                document.getElementById('blockedDomain').textContent = domainMatch[1];
+                                console.log('✅ Extracted domain from string:', domainMatch[1]);
+                            } else {
+                                document.getElementById('blockedDomain').textContent = blockedUrl;
+                            }
                         }
                     } else {
                         document.getElementById('blockedDomain').textContent = 'Unknown domain';
                     }
-                } else {
+                } catch (storageError) {
+                    console.log('❌ Error accessing storage:', storageError);
                     document.getElementById('blockedDomain').textContent = 'Unknown domain';
                 }
             } catch (error) {
-                console.error('Error loading blocked domain:', error);
-                document.getElementById('blockedDomain').textContent = 'Unknown domain';
+                console.error('❌ Error loading blocked domain:', error);
+                document.getElementById('blockedDomain').textContent = 'Error loading domain';
             }
         }
 
@@ -163,9 +244,11 @@
             window.history.back();
         }
 
-        // Load info on page load
-        loadCurrentIP();
-        loadBlockedDomain();
+        // Load info on page load with delay to ensure storage is ready
+        setTimeout(() => {
+            loadCurrentIP();
+            loadBlockedDomain();
+        }, 100);
     </script>
 </body>
 </html>

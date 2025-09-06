@@ -261,6 +261,16 @@ class URLUtils {
             
             // Handle wildcard patterns
             if (urlPattern.includes('*')) {
+                console.log(`🔍 Checking wildcard pattern: ${urlPattern} against ${accessHostname}`);
+                
+                // Special handling for *.binance.*
+                if (urlPattern === '*.binance.*') {
+                    const binancePatterns = ['binance.com', 'www.binance.com', 'api.binance.com', 'binance.org', 'www.binance.org'];
+                    const matches = binancePatterns.some(pattern => accessHostname === pattern || accessHostname.endsWith('.' + pattern));
+                    console.log(`🔍 Binance pattern check: ${matches}`);
+                    return matches;
+                }
+                
                 // Convert wildcard pattern to regex
                 let regexPattern = urlPattern
                     .replace(/\./g, '\\.')  // Escape dots
@@ -277,7 +287,9 @@ class URLUtils {
                 }
                 
                 const regex = new RegExp(regexPattern, 'i');
-                return regex.test(accessHostname);
+                const result = regex.test(accessHostname);
+                console.log(`🔍 Regex pattern: ${regexPattern}, result: ${result}`);
+                return result;
             }
             
             // Handle exact domain match
@@ -437,24 +449,48 @@ class BackgroundManager {
      * @returns {boolean} - Whether to block
      */
     static checkIPRules(userIP, rules) {
-        if (!rules || rules.length === 0) return false;
+        console.log(`🔍 checkIPRules called with IP: ${userIP}, Rules: [${rules.join(', ')}]`);
+        
+        if (!rules || rules.length === 0) {
+            console.log('✅ No rules, allowing');
+            return false;
+        }
         
         const whitelistExists = rules.some(ip => !ip.startsWith('!'));
+        const blacklistExists = rules.some(ip => ip.startsWith('!'));
+        
+        console.log(`🔍 Whitelist exists: ${whitelistExists}, Blacklist exists: ${blacklistExists}`);
         
         for (const rule of rules) {
             const isNegative = rule.startsWith('!');
             const ip = isNegative ? rule.substring(1) : rule;
             
+            console.log(`🔍 Checking rule: ${rule} (isNegative: ${isNegative}, ip: ${ip})`);
+            
             if (isNegative && userIP === ip) {
+                console.log('🚫 IP found in blacklist, blocking');
                 return true; // Block if IP is in blacklist
             } else if (!isNegative && userIP === ip) {
+                console.log('✅ IP found in whitelist, allowing');
                 return false; // Allow if IP is in whitelist
             }
         }
         
         // If whitelist exists and IP not found, block
         // If only blacklist exists and IP not found, allow
-        return whitelistExists;
+        if (whitelistExists && !blacklistExists) {
+            console.log('🚫 Whitelist exists but IP not found, blocking');
+            return true; // Block if whitelist exists but IP not found
+        } else if (!whitelistExists && blacklistExists) {
+            console.log('✅ Only blacklist exists and IP not found, allowing');
+            return false; // Allow if only blacklist exists and IP not found
+        } else if (whitelistExists && blacklistExists) {
+            console.log('🚫 Both whitelist and blacklist exist but IP not found, blocking (whitelist takes precedence)');
+            return true; // Block if both exist but IP not found (whitelist takes precedence)
+        } else {
+            console.log('✅ No rules, allowing');
+            return false; // No rules, allow
+        }
     }
 
     /**
@@ -467,9 +503,18 @@ class BackgroundManager {
             const freshIP = await IPUtils.getFreshIP();
             console.log(`✅ IP updated to: ${freshIP}`);
             
+            // Verify IP was stored
+            const stored = await chrome.storage.local.get(['current_ip', 'cachedIP', 'last_ip_update']);
+            console.log('📋 Stored IP data:', stored);
+            
             // Update rules based on new IP
             await this.setupCachedRules();
             await this.setupProxyBlocking();
+            
+            // Ensure no stale declarativeNetRequest dynamic rules remain
+            await this.clearDynamicRules();
+            
+            console.log('✅ IP and rules update completed');
             
         } catch (error) {
             console.error('❌ Failed to update IP and rules:', error);
@@ -490,8 +535,7 @@ class BackgroundManager {
             
             // Set up message listener
             chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-                this.handleMessage(request, sender, sendResponse);
-                return true; // Keep message channel open for async response
+                return this.handleMessage(request, sender, sendResponse);
             });
             
             // Set up tab activation listener
@@ -507,6 +551,16 @@ class BackgroundManager {
             
             // Set up DNS level proxy blocking
             await this.setupProxyBlocking();
+            
+            // Ensure no stale declarativeNetRequest dynamic rules remain
+            await this.clearDynamicRules();
+            
+            // Force refresh proxy settings with delay
+            setTimeout(async () => {
+                await this.refreshProxySettings();
+            }, 1000);
+            
+            // Note: PAC script handles whitelist logic, no need to clear proxy
             
             // Set up detection for blocked requests
             this.setupBlockedRequestDetection();
@@ -524,16 +578,43 @@ class BackgroundManager {
      * Setup alarms for periodic tasks
      */
     static setupAlarms() {
-        console.log('⏰ Setting up alarms...');
-        // Create an alarm to refresh the IP every 10 minutes
-        chrome.alarms.create('refreshIP', {
-            delayInMinutes: 0.5,  // 30 ثانیه تاخیر اولیه
-            periodInMinutes: 0.5  // هر 30 ثانیه تکرار
-        });
+        try {
+            console.log('⏰ Setting up alarms...');
+            
+            // Check if alarms API is available
+            if (!chrome.alarms) {
+                console.warn('⚠️ Alarms API not available, using fallback timer');
+                // Fallback: use setInterval instead
+                setInterval(() => {
+                    console.log('⏰ Fallback timer triggered');
+                    this.updateIPAndRules();
+                }, 30000); // 30 seconds
+                return;
+            }
+            
+            // Create an alarm to refresh the IP every 30 seconds
+            chrome.alarms.create('refreshIP', {
+                delayInMinutes: 0.5,  // 30 ثانیه تاخیر اولیه
+                periodInMinutes: 0.5  // هر 30 ثانیه تکرار
+            });
+            
+            // Create an alarm to clear proxy every 2 minutes
+            chrome.alarms.create('clearProxy', {
+                delayInMinutes: 2,    // 2 دقیقه تاخیر اولیه
+                periodInMinutes: 2    // هر 2 دقیقه تکرار
+            });
 
-        // Add a listener for when the alarm fires
-        chrome.alarms.onAlarm.addListener(this.handleAlarm.bind(this));
-        console.log('✅ Alarms set up.');
+            // Add a listener for when the alarm fires
+            chrome.alarms.onAlarm.addListener(this.handleAlarm.bind(this));
+            console.log('✅ Alarms set up.');
+        } catch (error) {
+            console.error('❌ Error setting up alarms:', error);
+            // Fallback: use setInterval
+            setInterval(() => {
+                console.log('⏰ Fallback timer triggered');
+                this.updateIPAndRules();
+            }, 30000); // 30 seconds
+        }
     }
 
     /**
@@ -544,9 +625,71 @@ class BackgroundManager {
         if (alarm.name === 'refreshIP') {
             console.log('⏰ Alarm triggered: refreshIP');
             await this.updateIPAndRules();
+        } else if (alarm.name === 'clearProxy') {
+            console.log('⏰ Alarm triggered: clearProxy');
+            await this.forceClearProxyOnStartup();
         }
     }
 
+
+    /**
+     * Force clear proxy on startup
+     */
+    static async forceClearProxyOnStartup() {
+        try {
+            console.log('🚀 Force clearing proxy on startup...');
+            
+            // Multiple clear attempts
+            for (let i = 0; i < 5; i++) {
+                await chrome.proxy.settings.clear({});
+                console.log(`✅ Clear attempt ${i + 1}`);
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            // Force set direct connection
+            await chrome.proxy.settings.set({
+                value: { mode: 'direct' },
+                scope: 'regular'
+            });
+            console.log('✅ Direct connection set');
+            
+            // Wait a bit
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Clear again
+            await chrome.proxy.settings.clear({});
+            console.log('✅ Final clear completed');
+            
+        } catch (error) {
+            console.error('❌ Error force clearing proxy on startup:', error);
+        }
+    }
+
+    /**
+     * Force refresh proxy settings to ensure changes take effect
+     */
+    static async refreshProxySettings() {
+        try {
+            console.log('🔄 Refreshing proxy settings...');
+            
+            // Get current proxy settings
+            const settings = await chrome.proxy.settings.get({});
+            console.log('📋 Current proxy settings:', settings);
+            
+            // Force a refresh by setting the same settings again
+            if (settings.value && settings.value.mode === 'pac_script') {
+                await chrome.proxy.settings.set({
+                    value: settings.value,
+                    scope: 'regular'
+                });
+                console.log('✅ Proxy settings refreshed');
+            } else {
+                console.log('ℹ️ No PAC script to refresh');
+            }
+        } catch (error) {
+            console.error('❌ Error refreshing proxy settings:', error);
+        }
+    }
 
     /**
      * Set up detection for requests blocked by the proxy.
@@ -556,21 +699,26 @@ class BackgroundManager {
         console.log('🔧 Setting up blocked request detection...');
         chrome.webRequest.onErrorOccurred.addListener(
             async (details) => {
+                console.log('🔍 ===== WEBREQUEST ERROR DETECTED =====');
+                console.log('🔍 WebRequest error detected:', details.error, 'for URL:', details.url);
+                console.log('🔍 Tab ID:', details.tabId, 'Frame ID:', details.frameId);
+                
                 // These errors indicate the proxy blocked the connection
                 const proxyErrors = [
                     'net::ERR_PROXY_CONNECTION_FAILED',
                     'net::ERR_TUNNEL_CONNECTION_FAILED',
-                    'net::ERR_CONNECTION_REFUSED' 
+                    'net::ERR_CONNECTION_REFUSED',
+                    'net::ERR_BLOCKED_BY_CLIENT'
                 ];
 
                 if (proxyErrors.includes(details.error) && details.tabId > 0) {
                     console.log(`🚫 Proxy error detected for ${details.url}. Error: ${details.error}`);
                     
-                    // Check if this URL was meant to be blocked by our rules
+                    // Check if this URL should actually be blocked by our rules (async version)
                     const shouldBlock = await this.shouldBlockURL(details.url);
                     
                     if (shouldBlock) {
-                        console.log(`🎯 URL ${details.url} matches blocking rules. Replacing tab content.`);
+                        console.log(`🎯 URL ${details.url} matches blocking rules, replacing with custom page.`);
                         try {
                             // Store the original URL so the blocked page can display it
                             await chrome.storage.local.set({ [`blockedUrl_${details.tabId}`]: details.url });
@@ -587,6 +735,9 @@ class BackgroundManager {
                                 console.error(`❌ Error updating tab ${details.tabId}:`, error);
                             }
                         }
+                    } else {
+                        console.log(`ℹ️ URL ${details.url} blocked by proxy but not by our rules, ignoring.`);
+                        console.log(`ℹ️ This means the IP is in the whitelist and should be allowed.`);
                     }
                 }
             },
@@ -618,8 +769,9 @@ class BackgroundManager {
                 
                 // Block immediately by redirecting to blocked page
                 try {
+                    const domain = URLUtils.getHostFromURL(details.url);
                     await chrome.tabs.update(tabId, {
-                        url: chrome.runtime.getURL('html/blocked.html')
+                        url: chrome.runtime.getURL(`html/blocked.html?domain=${encodeURIComponent(domain)}`)
                     });
                     console.log('✅ Tab', tabId, 'redirected to blocked page');
                 } catch (redirectError) {
@@ -686,14 +838,24 @@ class BackgroundManager {
             console.log('🔍 Sync check for URL:', url);
             
             // Use cached data if available
-            if (this._cachedRules) {
+            if (this._cachedRules && this._cachedRules.length > 0) {
+                console.log(`🔍 Using cached rules: ${this._cachedRules.length} rules`);
                 for (const rule of this._cachedRules) {
-                    if (URLUtils.matchingDomainRegex(url, rule.domain)) {
+                    console.log(`🔍 Checking rule: ${rule.domain} against ${url}`);
+                    const domainMatch = URLUtils.matchingDomainRegex(url, rule.domain);
+                    console.log(`🔍 Domain match: ${domainMatch}`);
+                    
+                    if (domainMatch) {
+                        console.log(`🔍 Cached rule matched: ${rule.domain}`);
                         const shouldBlock = this.checkIPRules(rule.currentIP, rule.allowedIPs);
-                        console.log(`🔍 Cached rule check: ${rule.domain} -> ${shouldBlock}`);
+                        console.log(`🔍 Cached rule check: ${rule.domain} -> ${shouldBlock} (IP: ${rule.currentIP}, Allowed: ${rule.allowedIPs})`);
                         return shouldBlock;
                     }
                 }
+            } else {
+                console.log('⚠️ No cached rules available, falling back to storage');
+                // Fallback: return false for now, let the async version handle it
+                return false;
             }
             
             console.log('✅ No cached rules matched, allowing');
@@ -743,6 +905,7 @@ class BackgroundManager {
                         const shouldBlock = this.checkIPRules(userIP, currentIPs);
                         
                         console.log('🚫 Should block:', shouldBlock);
+                        console.log(`🔍 Final decision: ${shouldBlock ? 'BLOCK' : 'ALLOW'} for ${url} (IP: ${userIP}, Allowed: [${currentIPs.join(', ')}])`);
                         
                         return shouldBlock;
                         
@@ -800,14 +963,23 @@ class BackgroundManager {
             const storedIPs = storageData.allowed_ips || [];
             const currentIP = await IPUtils.getCachedIP();
             
+            console.log('📋 Stored URLs:', storedUrls);
+            console.log('📋 Stored IPs:', storedIPs);
+            console.log('📋 Current IP:', currentIP);
+            
             // Cache rules for sync access
             this._cachedRules = [];
             this._blockedDomains = new Set();
+            
+            console.log(`🔧 Processing ${storedUrls.length} stored URLs...`);
             
             for (let i = 0; i < storedUrls.length; i++) {
                 const domain = storedUrls[i];
                 const allowedIPsString = storedIPs[i] || '';
                 const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
+                
+                console.log(`🔧 Processing domain ${i + 1}/${storedUrls.length}: ${domain}`);
+                console.log(`🔧 Allowed IPs: [${allowedIPs.join(', ')}]`);
                 
                 this._cachedRules.push({
                     domain: domain,
@@ -817,6 +989,8 @@ class BackgroundManager {
                 
                 // Check if this domain should be blocked
                 const shouldBlock = this.checkIPRules(currentIP, allowedIPs);
+                console.log(`🔍 Domain: ${domain}, Should block: ${shouldBlock}, Current IP: ${currentIP}, Allowed IPs: ${allowedIPs}`);
+                
                 if (shouldBlock) {
                     // Convert wildcard domains to specific patterns
                     if (domain.includes('*')) {
@@ -826,21 +1000,27 @@ class BackgroundManager {
                             this._blockedDomains.add('api.binance.com');
                             this._blockedDomains.add('binance.org');
                             this._blockedDomains.add('www.binance.org');
+                            console.log('🚫 Added binance domains to blocked list');
                         } else {
                             // General wildcard handling
                             const baseDomain = domain.replace(/^\*\./, '').replace(/\.\*$/, '');
                             this._blockedDomains.add(baseDomain);
                             this._blockedDomains.add(`www.${baseDomain}`);
+                            console.log(`🚫 Added wildcard domains to blocked list: ${baseDomain}`);
                         }
                     } else {
                         this._blockedDomains.add(domain);
                         this._blockedDomains.add(`www.${domain}`);
+                        console.log(`🚫 Added domain to blocked list: ${domain}`);
                     }
+                } else {
+                    console.log(`✅ Domain ${domain} is allowed for IP ${currentIP}`);
                 }
             }
             
             console.log('📋 Cached rules for sync access:', this._cachedRules);
             console.log('🚫 Blocked domains:', Array.from(this._blockedDomains));
+            console.log(`✅ setupCachedRules completed: ${this._cachedRules.length} rules cached, ${this._blockedDomains.size} domains blocked`);
         } catch (error) {
             console.error('❌ Error setting up cached rules:', error);
         }
@@ -853,29 +1033,100 @@ class BackgroundManager {
         try {
             console.log('🔧 Setting up DNS level proxy blocking...');
             
-            if (!this._blockedDomains || this._blockedDomains.size === 0) {
-                console.log('ℹ️ No domains to block, clearing proxy settings');
-                await chrome.proxy.settings.clear({});
-                return;
+            // Always set up PAC script, even if no domains are blocked
+            // This ensures we can handle whitelist logic properly
+            
+            // Check if current IP is in whitelist for any domain
+            const currentIP = await IPUtils.getCachedIP();
+            const storageData = await chrome.storage.local.get(['urls', 'allowed_ips']);
+            const storedUrls = storageData.urls || [];
+            const storedIPs = storageData.allowed_ips || [];
+            
+            // current IP and whitelist logic
+            
+            // Create whitelist data for PAC script
+            const whitelistData = [];
+            for (let i = 0; i < storedUrls.length; i++) {
+                const domain = storedUrls[i];
+                const allowedIPsString = storedIPs[i] || '';
+                const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
+                
+                // domain allowed IPs collected
+                
+                whitelistData.push({
+                    domain: domain,
+                    allowedIPs: allowedIPs
+                });
             }
             
-            // Create PAC script that blocks domains at DNS level
-            const pacScript = this.generatePACScript(Array.from(this._blockedDomains));
+            // Build whitelist data for PAC script
             
-            const proxyConfig = {
-                mode: 'pac_script',
-                pacScript: {
-                    data: pacScript
+            // Force clear proxy settings first
+            try {
+                for (let i = 0; i < 3; i++) {
+                    await chrome.proxy.settings.clear({});
+                    console.log(`✅ Clear attempt ${i + 1}`);
+                    await new Promise(resolve => setTimeout(resolve, 200));
                 }
-            };
+                
+                // Wait a bit before setting PAC script
+                await new Promise(resolve => setTimeout(resolve, 500));
+                console.log('⏳ Waiting before setting PAC script...');
+            } catch (error) {
+                console.error('❌ Error clearing proxy settings:', error);
+            }
             
-            await chrome.proxy.settings.set({
-                value: proxyConfig,
-                scope: 'regular'
-            });
+            // Check if current IP is in whitelist for ANY domain
+            let shouldUseDirect = false;
+            // checking whitelist
+            
+            for (let i = 0; i < storedUrls.length; i++) {
+                const domain = storedUrls[i];
+                const allowedIPsString = storedIPs[i] || '';
+                const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
+                
+                // comparing current IP with allowed list for domain
+                
+                if (allowedIPs.includes(currentIP)) {
+                    // current IP is whitelisted for this domain
+                    shouldUseDirect = true;
+                    break;
+                }
+            }
+            
+            if (shouldUseDirect) {
+                // Use direct connection for whitelisted IPs
+                const proxyConfig = {
+                    mode: 'direct'
+                };
+                
+                await chrome.proxy.settings.set({
+                    value: proxyConfig,
+                    scope: 'regular'
+                });
+                
+                console.log('✅ Direct connection set for whitelisted IP');
+            } else {
+                // Use PAC script for non-whitelisted IPs
+                const blockedDomains = this._blockedDomains ? Array.from(this._blockedDomains) : [];
+                const pacScript = this.generatePACScript(blockedDomains, currentIP, whitelistData);
+                
+                const proxyConfig = {
+                    mode: 'pac_script',
+                    pacScript: {
+                        data: pacScript
+                    }
+                };
+                
+                await chrome.proxy.settings.set({
+                    value: proxyConfig,
+                    scope: 'regular'
+                });
+                
+                console.log('✅ PAC script set for non-whitelisted IP');
+            }
             
             console.log('✅ DNS level proxy blocking set up');
-            console.log('🚫 Blocking domains:', Array.from(this._blockedDomains));
             
         } catch (error) {
             console.error('❌ Error setting up proxy blocking:', error);
@@ -885,15 +1136,21 @@ class BackgroundManager {
     /**
      * Generate PAC script for redirecting blocked domains
      */
-    static generatePACScript(blockedDomains) {
+    static generatePACScript(blockedDomains, currentIP, whitelistData) {
         const blockedDomainsArray = JSON.stringify(blockedDomains);
         const blockedPageUrl = chrome.runtime.getURL('html/blocked.html');
+        const whitelistDataStr = JSON.stringify(whitelistData);
         
         return `
 function FindProxyForURL(url, host) {
+    console.log("PAC: ===== PAC SCRIPT EXECUTED =====");
     console.log("PAC: Checking URL:", url, "Host:", host);
+    console.log("PAC: Current IP:", "${currentIP}");
+    console.log("PAC: Whitelist data:", ${whitelistDataStr});
     
     var blockedDomains = ${blockedDomainsArray};
+    var whitelistData = ${whitelistDataStr};
+    var currentIP = "${currentIP}";
     
     // Check if this is already our blocked page - allow it
     if (url.indexOf("${blockedPageUrl}") === 0) {
@@ -901,30 +1158,68 @@ function FindProxyForURL(url, host) {
         return "DIRECT";
     }
     
-    // Check if host matches any blocked domain
-    for (var i = 0; i < blockedDomains.length; i++) {
-        var blockedDomain = blockedDomains[i];
+    // Check if current IP is in whitelist for this domain
+    console.log("PAC: Checking", whitelistData.length, "whitelist entries");
+    for (var i = 0; i < whitelistData.length; i++) {
+        var domain = whitelistData[i].domain;
+        var allowedIPs = whitelistData[i].allowedIPs;
+        console.log("PAC: Checking domain", domain, "with allowed IPs:", allowedIPs);
         
-        // Exact match
-        if (host === blockedDomain) {
-            console.log("PAC: BLOCKING (exact match):", host);
-            return "PROXY 127.0.0.1:1";
+        // Check if host matches this domain
+        var domainMatch = false;
+        
+        // Handle wildcard domains
+        if (domain.includes('*')) {
+            if (domain === '*.binance.*') {
+                // Match any binance domain
+                if (host.indexOf('binance') !== -1) {
+                    console.log("PAC: Binance wildcard matched for host:", host);
+                    domainMatch = true;
+                }
+            } else if (domain.startsWith('*.')) {
+                // Match subdomains
+                var baseDomain = domain.substring(2);
+                if (host === baseDomain || host.endsWith('.' + baseDomain)) {
+                    console.log("PAC: Subdomain matched:", baseDomain, "for host:", host);
+                    domainMatch = true;
+                }
+            } else if (domain.endsWith('.*')) {
+                // Match domains with same prefix
+                var prefix = domain.substring(0, domain.length - 2);
+                if (host.startsWith(prefix)) {
+                    console.log("PAC: Prefix matched:", prefix, "for host:", host);
+                    domainMatch = true;
+                }
+            }
+        } else {
+            // Exact match
+            if (host === domain) {
+                console.log("PAC: Exact match:", domain, "for host:", host);
+                domainMatch = true;
+            } else if (host.endsWith('.' + domain)) {
+                console.log("PAC: Subdomain match:", domain, "for host:", host);
+                domainMatch = true;
+            }
         }
         
-        // Subdomain match
-        if (host.endsWith('.' + blockedDomain)) {
-            console.log("PAC: BLOCKING (subdomain):", host);
-            return "PROXY 127.0.0.1:1";
-        }
-        
-        // Wildcard match for binance
-        if (blockedDomain === 'binance.com' && host.indexOf('binance') !== -1) {
-            console.log("PAC: BLOCKING (binance wildcard):", host);
+        if (domainMatch) {
+            console.log("PAC: Domain matched:", domain, "for host:", host);
+            console.log("PAC: Checking IP:", currentIP, "against allowed IPs:", allowedIPs);
+            
+            // Check if current IP is in whitelist
+            for (var j = 0; j < allowedIPs.length; j++) {
+                if (allowedIPs[j] === currentIP) {
+                    console.log("PAC: ALLOWING (IP in whitelist):", host, "IP:", currentIP);
+                    return "DIRECT";
+                }
+            }
+            console.log("PAC: BLOCKING (IP not in whitelist):", host, "IP:", currentIP);
             return "PROXY 127.0.0.1:1";
         }
     }
     
-    console.log("PAC: ALLOWING:", host);
+    console.log("PAC: ALLOWING (no domain match):", host);
+    console.log("PAC: ===== PAC SCRIPT COMPLETED =====");
     return "DIRECT";
 }`;
     }
@@ -1044,6 +1339,27 @@ function FindProxyForURL(url, host) {
     }
 
     /**
+     * Clear ALL dynamic rules from declarativeNetRequest to avoid residual blocking
+     */
+    static async clearDynamicRules() {
+        try {
+            if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.getDynamicRules) {
+                return;
+            }
+            const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+            if (existingRules && existingRules.length > 0) {
+                const ruleIdsToRemove = existingRules.map(rule => rule.id);
+                await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIdsToRemove });
+                console.log(`🧹 Cleared ${ruleIdsToRemove.length} dynamic DNR rules`);
+            } else {
+                console.log('🧹 No dynamic DNR rules to clear');
+            }
+        } catch (error) {
+            console.error('❌ Error clearing dynamic DNR rules:', error);
+        }
+    }
+
+    /**
      * Initialize blocking rules
      */
     static async initializeBlockingRules() {
@@ -1123,63 +1439,206 @@ function FindProxyForURL(url, host) {
      * @param {Object} sender - Message sender
      * @param {Function} sendResponse - Response function
      */
-    static async handleMessage(request, sender, sendResponse) {
-        try {
-            switch (request.type) {
-                case 'update':
-                    await this.updateLocalStorage();
-                    await this.setupCachedRules();
-                    await this.setupProxyBlocking();
-                    sendResponse({ success: true });
-                    break;
-                    
-                case 'refresh':
-                    const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-                    if (tabs[0]) {
-                        await chrome.scripting.executeScript({
-                            target: { tabId: tabs[0].id },
-                            func: () => {
-                                setTimeout(function(){
-                                    window.location.reload();
-                                }, 500);
+    static handleMessage(request, sender, sendResponse) {
+        console.log('📨 Message received:', request.type);
+        
+        // Handle async operations properly
+        (async () => {
+            try {
+                switch (request.type) {
+                    case 'update':
+                        await this.updateLocalStorage();
+                        await this.setupCachedRules();
+                        await this.setupProxyBlocking();
+                        sendResponse({ success: true });
+                        break;
+                        
+                    case 'refresh':
+                        const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+                        if (tabs[0]) {
+                            await chrome.scripting.executeScript({
+                                target: { tabId: tabs[0].id },
+                                func: () => {
+                                    setTimeout(function(){
+                                        window.location.reload();
+                                    }, 500);
+                                }
+                            });
+                        }
+                        sendResponse({ success: true });
+                        break;
+                        
+                    case 'refreshIP':
+                        try {
+                            console.log('🔄 refreshIP message received');
+                            await this.updateIPAndRules();
+                            const result = await chrome.storage.local.get(['current_ip', 'cachedIP']);
+                            const ip = result.current_ip || result.cachedIP;
+                            console.log('📤 Sending IP response:', ip);
+                            sendResponse({ success: true, ip: ip });
+                        } catch (error) {
+                            console.error('❌ Error in refreshIP:', error);
+                            await ErrorHandler.handle(error, 'refreshIP');
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'getTimeUntilUpdate':
+                        try {
+                            const timeRemaining = await IPUtils.getTimeUntilNextUpdate();
+                            sendResponse({ success: true, timeRemaining: timeRemaining });
+                        } catch (error) {
+                            await ErrorHandler.handle(error, 'getTimeUntilUpdate');
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'getCurrentIP':
+                        try {
+                            const result = await chrome.storage.local.get(['current_ip', 'cachedIP']);
+                            const ip = result.current_ip || result.cachedIP;
+                            sendResponse({ success: true, ip: ip });
+                        } catch (error) {
+                            await ErrorHandler.handle(error, 'getCurrentIP');
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'debugRules':
+                        try {
+                            console.log('🔍 Debug rules requested');
+                            const storage = await chrome.storage.local.get(['urls', 'allowed_ips', 'current_ip', 'cachedIP']);
+                            const currentIP = storage.current_ip || storage.cachedIP;
+                            
+                            console.log('📋 Debug rules data:');
+                            console.log('   URLs:', storage.urls);
+                            console.log('   Allowed IPs:', storage.allowed_ips);
+                            console.log('   Current IP:', currentIP);
+                            console.log('   Cached rules:', this._cachedRules);
+                            console.log('   Blocked domains:', Array.from(this._blockedDomains));
+                            
+                            sendResponse({ 
+                                success: true, 
+                                data: {
+                                    urls: storage.urls,
+                                    allowed_ips: storage.allowed_ips,
+                                    current_ip: currentIP,
+                                    cached_rules: this._cachedRules,
+                                    blocked_domains: Array.from(this._blockedDomains)
+                                }
+                            });
+                        } catch (error) {
+                            console.error('❌ Error in debugRules:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'clearProxy':
+                        try {
+                            console.log('🧹 Clearing proxy settings...');
+                            
+                            // First, clear proxy settings
+                            await chrome.proxy.settings.clear({});
+                            console.log('✅ Proxy settings cleared successfully');
+                            
+                            // Wait a bit for settings to take effect
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            
+                            // Force set direct connection
+                            await chrome.proxy.settings.set({
+                                value: {
+                                    mode: 'direct'
+                                },
+                                scope: 'regular'
+                            });
+                            console.log('✅ Direct connection set');
+                            
+                            // Wait a bit more
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            
+                            // Clear again to ensure it's really cleared
+                            await chrome.proxy.settings.clear({});
+                            console.log('✅ Proxy settings cleared again');
+                            
+                            // Wait for final clear to take effect
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            
+                            // Force refresh all tabs
+                            const tabs = await chrome.tabs.query({});
+                            console.log(`🔄 Refreshing ${tabs.length} tabs...`);
+                            
+                            for (const tab of tabs) {
+                                try {
+                                    if (tab.url && tab.url.includes('binance.com')) {
+                                        console.log(`🔄 Refreshing binance tab: ${tab.id}`);
+                                        await chrome.tabs.reload(tab.id);
+                                    }
+                                } catch (e) {
+                                    console.log(`⚠️ Could not refresh tab ${tab.id}:`, e.message);
+                                }
                             }
-                        });
-                    }
-                    sendResponse({ success: true });
-                    break;
-                    
-                case 'refreshIP':
-                    try {
-                        await this.updateIPAndRules();
-                        const result = await chrome.storage.local.get(['current_ip']);
-                        sendResponse({ success: true, ip: result.current_ip });
-                    } catch (error) {
-                        await ErrorHandler.handle(error, 'refreshIP');
-                        sendResponse({ success: false, error: error.message });
-                    }
-                    break;
-                    
-                case 'getTimeUntilUpdate':
-                    try {
-                        const timeRemaining = await IPUtils.getTimeUntilNextUpdate();
-                        sendResponse({ success: true, timeRemaining: timeRemaining });
-                    } catch (error) {
-                        await ErrorHandler.handle(error, 'getTimeUntilUpdate');
-                        sendResponse({ success: false, error: error.message });
-                    }
-                    break;
-                    
-                    
-                    
-                    
-                    
-                default:
-                    sendResponse({ success: false, error: 'Unknown message type' });
+                            
+                            // Also try to refresh current active tab
+                            try {
+                                const activeTabs = await chrome.tabs.query({active: true, currentWindow: true});
+                                if (activeTabs[0]) {
+                                    await chrome.tabs.reload(activeTabs[0].id);
+                                    console.log('🔄 Refreshed active tab');
+                                }
+                            } catch (e) {
+                                console.log('⚠️ Could not refresh active tab:', e.message);
+                            }
+                            
+                            sendResponse({ success: true });
+                        } catch (error) {
+                            console.error('❌ Error clearing proxy:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'forceClearProxy':
+                        try {
+                            console.log('💥 Force clearing proxy settings...');
+                            
+                            // Multiple clear attempts
+                            for (let i = 0; i < 3; i++) {
+                                await chrome.proxy.settings.clear({});
+                                console.log(`✅ Clear attempt ${i + 1}`);
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                            
+                            // Force set direct connection multiple times
+                            for (let i = 0; i < 3; i++) {
+                                await chrome.proxy.settings.set({
+                                    value: { mode: 'direct' },
+                                    scope: 'regular'
+                                });
+                                console.log(`✅ Direct connection attempt ${i + 1}`);
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                            
+                            // Final clear
+                            await chrome.proxy.settings.clear({});
+                            console.log('✅ Final clear completed');
+                            
+                            sendResponse({ success: true });
+                        } catch (error) {
+                            console.error('❌ Error force clearing proxy:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    default:
+                        sendResponse({ success: false, error: 'Unknown message type' });
+                }
+            } catch (error) {
+                console.error('❌ Error in handleMessage:', error);
+                await ErrorHandler.handle(error, 'handleMessage');
+                sendResponse({ success: false, error: error.message });
             }
-        } catch (error) {
-            await ErrorHandler.handle(error, 'handleMessage');
-            sendResponse({ success: false, error: error.message });
-        }
+        })();
+        
+        return true; // Keep message channel open for async response
     }
 }
 
