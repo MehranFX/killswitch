@@ -1,34 +1,44 @@
 {
-	"manifest_version": 2,
-	"name": "Kill Switch",
+	"manifest_version": 3,
+	"name": "Kill Switch Enhanced",
 	"short_name": "Kill Switch",
-	"description": "An extension to prevent access to websites depending on your public IP address. Icon from flaticon.com.",
-	"version": "1.11",
-	"version_name": "1.0 beta",
+	"description": "An enhanced extension to prevent access to websites depending on your public IP address with improved security and user experience.",
+	"version": "2.0",
+	"version_name": "2.0 Enhanced",
     "author": "github.com/maxisme",
 	"background": {
-		"scripts": ["background.js"],
-		"persistent": true
+		"service_worker": "background.js"
 	},
 	"icons": {
 		"48": "/img/icon-48x48-red.png",
-		"128": "/img/icon-128x128-red.png"
+		"128": "/img/icon-128x128-red.png",
+		"512": "/img/icon-512x512-red.png"
 	 },
 	"permissions": [
-	   "webRequest",
-	   "webRequestBlocking",
-	   "<all_urls>", 
-	   "storage"
+	   "storage",
+	   "activeTab",
+	   "scripting",
+	   "tabs"
+	],
+	"host_permissions": [
+		"<all_urls>"
 	],
 	"options_ui": {
 		"page": "/html/options.html",
-		"chrome_style": true,
 		"open_in_tab": false
 	},
-	"web_accessible_resources": ["src/options/options.html"],
-	"browser_action": {
+	"web_accessible_resources": [
+		{
+			"resources": ["src/options/options.html"],
+			"matches": ["<all_urls>"]
+		}
+	],
+	"action": {
 		"default_icon": "/img/icon-48x48-grey.png",
 		"default_popup": "/html/popup.html",
-		"default_title": "Kill Switch"
+		"default_title": "Kill Switch Enhanced"
+	},
+	"content_security_policy": {
+		"extension_pages": "script-src 'self'; object-src 'self';"
 	}
 }

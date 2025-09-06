@@ -1,68 +1,213 @@
 "use strict";
 
-function saveOptions(i){
-	var domain_regexs = document.getElementsByClassName("domain_regex");
-	var ips = document.getElementsByClassName("ips");
-	
-	var domain_regex = domain_regexs[i].value;
-	var ip = ips[i].value;
-	console.log("domain: "+domain_regex+" ip: "+ip);
-	storeWhitelist(domain_regex, ip, true, function(){ 
-		i++;
-		if(i < domain_regexs.length){
-			saveOptions(i);
-		}else{
-			setUpOptions();
-		}
-	});
+/**
+ * Enhanced options page functionality with better validation and error handling
+ */
+
+class OptionsManager {
+    /**
+     * Save options with enhanced validation
+     * @param {number} index - Current index being processed
+     */
+    static async saveOptions(index = 0) {
+        try {
+            const domainRegexs = document.getElementsByClassName("domain_regex");
+            const ipInputs = document.getElementsByClassName("ips");
+            
+            if (index >= domainRegexs.length) {
+                await this.setUpOptions();
+                this.showMessage('All rules saved successfully!', 'success');
+                return;
+            }
+            
+            const domainRegex = domainRegexs[index].value.trim();
+            const ip = ipInputs[index].value.trim();
+            
+            // Validate inputs
+            if (!domainRegex) {
+                throw new Error(`Domain/URL at position ${index + 1} cannot be empty`);
+            }
+            
+            if (!ip) {
+                throw new Error(`IP addresses at position ${index + 1} cannot be empty`);
+            }
+            
+            // Validate domain/URL
+            if (!ValidationUtils.isValidURL(domainRegex) && !ValidationUtils.isValidDomain(domainRegex)) {
+                throw new Error(`Invalid domain/URL format at position ${index + 1}: ${domainRegex}`);
+            }
+            
+            // Validate IPs
+            const ipArray = ip.split(',').map(ip => ip.trim());
+            for (const ipAddr of ipArray) {
+                const cleanIP = ipAddr.startsWith('!') ? ipAddr.substring(1) : ipAddr;
+                if (!ValidationUtils.isValidIP(cleanIP)) {
+                    throw new Error(`Invalid IP address at position ${index + 1}: ${cleanIP}`);
+                }
+            }
+            
+            // Save the rule
+            await SettingsManager.storeWhitelist(domainRegex, ip, true, null);
+            
+            // Process next item
+            await this.saveOptions(index + 1);
+            
+        } catch (error) {
+            await ErrorHandler.handle(error, 'saveOptions');
+            this.showMessage(`Error saving rule at position ${index + 1}: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Add new rule form
+     */
+    static addNewRule() {
+        const content = document.getElementById("content");
+        if (!content) return;
+        
+        const newRuleHTML = `
+            <div class="rule-item">
+                <p>
+                    <strong>URL/Domain</strong><br>
+                    <input class="domain_regex" placeholder="Enter URL or domain (e.g., example.com)" value=""/><br>
+                    <strong>ALLOWED IPS</strong> (separate with comma)<br>
+                    <textarea class="ips" placeholder="Enter IP addresses (e.g., 192.168.1.1, 10.0.0.1)" style="width:100%; height:60px;"></textarea><br>
+                    <small>Use ! before IP to blacklist (e.g., !192.168.1.1)</small>
+                </p>
+            </div>
+        `;
+        
+        content.insertAdjacentHTML('beforeend', newRuleHTML);
+    }
+
+    /**
+     * Show message to user
+     * @param {string} message - Message to show
+     * @param {string} type - Message type (success, error, info)
+     */
+    static showMessage(message, type = 'info') {
+        const messageElement = document.getElementById('message');
+        if (messageElement) {
+            messageElement.textContent = message;
+            messageElement.className = `message ${type}`;
+            messageElement.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                messageElement.style.display = 'none';
+            }, 5000);
+        }
+    }
+
+    /**
+     * Set up options page with existing rules
+     */
+    static async setUpOptions() {
+        try {
+            const urlData = await chrome.storage.local.get(['urls']);
+            const ipData = await chrome.storage.local.get(['allowed_ips']);
+            
+            const urlArray = urlData.urls || [];
+            const allowedIPsArray = ipData.allowed_ips || [];
+            
+            let html = "";
+            
+            if (urlArray.length > 0) {
+                for (let i = 0; i < urlArray.length; i++) {
+                    const url = SecurityUtils.escapeHTML(urlArray[i]);
+                    const ips = SecurityUtils.escapeHTML((allowedIPsArray[i] || '').replace(/\|/g, ''));
+                    
+                    html += `
+                        <div class="rule-item">
+                            <p>
+                                <strong>URL/Domain</strong> - 
+                                <a href="#" url="${url}" class="delete">REMOVE RULE</a><br>
+                                <input class="domain_regex" value="${url}" disabled/><br>
+                                <strong>ALLOWED IPS</strong> (separate with comma)<br>
+                                <textarea class="ips" style="width:100%; height:60px;">${ips}</textarea><br>
+                                <small>Use ! before IP to blacklist (e.g., !192.168.1.1)</small>
+                            </p>
+                        </div>
+                    `;
+                }
+            } else {
+                html = '<p class="no-rules">No rules configured yet. Add your first rule below.</p>';
+            }
+            
+            const content = document.getElementById("content");
+            if (content) {
+                content.innerHTML = html;
+            }
+            
+            // Set up delete event listeners
+            this.setupDeleteListeners();
+            
+        } catch (error) {
+            await ErrorHandler.handle(error, 'setUpOptions');
+        }
+    }
+
+    /**
+     * Set up delete event listeners
+     */
+    static setupDeleteListeners() {
+        const deleteButtons = document.getElementsByClassName("delete");
+        
+        for (let i = 0; i < deleteButtons.length; i++) {
+            deleteButtons[i].addEventListener('click', async (e) => {
+                e.preventDefault();
+                const url = e.target.getAttribute("url");
+                
+                try {
+                    await SettingsManager.deleteWhitelist(url);
+                    e.target.closest('.rule-item').remove();
+                    this.showMessage('Rule removed successfully!', 'success');
+                } catch (error) {
+                    await ErrorHandler.handle(error, 'deleteRule');
+                }
+            });
+        }
+    }
+
+    /**
+     * Initialize event listeners
+     */
+    static initializeEventListeners() {
+        // Save button
+        const saveBtn = document.getElementById("save");
+        if (saveBtn) {
+            saveBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                this.saveOptions(0);
+            });
+        }
+
+        // Add button
+        const addBtn = document.getElementById("add");
+        if (addBtn) {
+            addBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                this.addNewRule();
+            });
+        }
+    }
 }
 
-document.getElementById("save").addEventListener("click", function(){
-	saveOptions(0);
-}, false);
-
-document.getElementById("add").addEventListener("click", function(){
-	var html = document.getElementById("content").innerHTML;
-	html += '<p><strong>URL</strong><br><input class="domain_regex" value=""/><br><strong>ALLOWED IPS</strong> seperate with comma<br><textarea class="ips" style="width:100%"></textarea><br></p>';
-	document.getElementById("content").innerHTML = html;
-});
-
-function setMessage(string){
-	document.getElementById("message").innerHTML = string;
+// Legacy functions for backward compatibility
+function saveOptions(i) {
+    OptionsManager.saveOptions(i);
 }
 
-function setUpOptions(){
-	//chrome.storage.local.clear(function() {});
-	chrome.storage.local.get("urls", function (url_array) {
-		url_array = url_array.urls;
-		console.log("urls:"+JSON.stringify(url_array));
-		chrome.storage.local.get("allowed_ips", function(allowed_ips_array) {
-				allowed_ips_array = allowed_ips_array.allowed_ips;
-				console.log("allowed_ips_array:"+JSON.stringify(allowed_ips_array));
-				var html = "";
-				if(allowed_ips_array != null){
-					for(var x=0; x < allowed_ips_array.length; x++){
-						var url = url_array[x];
-						var ips = allowed_ips_array[x].replace(/\|/g,'');
-						html += '<p><strong>URL</strong> - <a href="#" url="'+url+'" class="delete">REMOVE RULE</a><br><input class="domain_regex" value="'+url+'"/disabled><br><strong>ALLOWED IPS</strong> seperate with comma<br><textarea class="ips" style="width:100%">'+ips+'</textarea><br></p>';
-					}
-					document.getElementById("content").innerHTML = html;
-				}
-
-				//set event delete listeners
-				var deleteClasses = document.getElementsByClassName("delete");
-				var deleteFunction = function() {
-					var url = this.getAttribute("url");
-					deleteWhitelist(url);
-					this.parentNode.innerHTML = "";
-				};
-				for (var i = 0; i < deleteClasses.length; i++) {
-					deleteClasses[i].addEventListener('click', deleteFunction, false);
-				}
-		});
-	});
+function setMessage(string) {
+    OptionsManager.showMessage(string, 'info');
 }
 
-window.onload = function(){
-	setUpOptions();
+function setUpOptions() {
+    OptionsManager.setUpOptions();
+}
+
+// Initialize when page loads
+window.onload = function() {
+    OptionsManager.initializeEventListeners();
+    OptionsManager.setUpOptions();
 };

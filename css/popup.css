@@ -14,10 +14,100 @@ h1{
 a{
 	text-decoration:none;
 }
+
 button{
 	width:200px;
 	font-size:15px;
+	transition: all 0.3s ease;
 }
+
+button:hover:not(:disabled) {
+	transform: translateY(-2px);
+	box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
 #rules{
 	text-decoration: underline;
+}
+
+/* Message styles */
+.message {
+	position: fixed;
+	top: 10px;
+	left: 50%;
+	transform: translateX(-50%);
+	padding: 10px 15px;
+	border-radius: 4px;
+	font-size: 12px;
+	z-index: 1000;
+	display: none;
+	animation: slideIn 0.3s ease;
+}
+
+.message.success {
+	background-color: #4CAF50;
+	color: white;
+}
+
+.message.error {
+	background-color: #f44336;
+	color: white;
+}
+
+.message.info {
+	background-color: #2196F3;
+	color: white;
+}
+
+@keyframes slideIn {
+	from {
+		opacity: 0;
+		transform: translateX(-50%) translateY(-20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(-50%) translateY(0);
+	}
+}
+
+/* Loading styles */
+#loading {
+	display: none;
+	text-align: center;
+	margin: 10px 0;
+}
+
+.loading-spinner {
+	border: 2px solid #f3f3f3;
+	border-top: 2px solid #3498db;
+	border-radius: 50%;
+	width: 20px;
+	height: 20px;
+	animation: spin 1s linear infinite;
+	margin: 0 auto;
+}
+
+@keyframes spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
+/* IP display styles */
+.ip {
+	font-weight: bold;
+	color: #2c3e50;
+}
+
+/* Button group styles */
+.button-group {
+	margin: 5px 0;
+}
+
+.button-group button {
+	margin: 2px 0;
 }
