@@ -57,6 +57,27 @@ class ValidationUtils {
      */
     static isValidDomain(domain) {
         if (!domain || typeof domain !== 'string') return false;
+        
+        // Handle wildcard domains
+        if (domain.includes('*')) {
+            // Simple wildcard validation - allow * at start, middle, or end
+            // Examples: *.example.com, example.*, *.example.*
+            const parts = domain.split('.');
+            
+            // Check if all parts are valid (either * or valid domain part)
+            for (const part of parts) {
+                if (part === '*') continue;
+                if (part === '') return false; // Empty part not allowed
+                
+                // Check if part is valid domain part
+                const partRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$/;
+                if (!partRegex.test(part)) return false;
+            }
+            
+            return true;
+        }
+        
+        // Regular domain validation
         const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/;
         return domainRegex.test(domain);
     }
@@ -255,25 +276,41 @@ class URLUtils {
         if (!accessUrl || !urlPattern) return false;
         
         try {
-            // If pattern doesn't include protocol, treat as domain
-            if (!urlPattern.includes('http')) {
-                const hostname = this.getHostFromURL(`https://${urlPattern}`);
-                if (hostname === urlPattern) {
-                    const escapedPattern = urlPattern.replace(/\./g, '\\.');
-                    const regex = new RegExp(`https?://${escapedPattern}/.*`, 'gi');
-                    return regex.test(accessUrl);
-                }
-            }
+            // Extract hostname from access URL
+            const accessHostname = this.getHostFromURL(accessUrl);
+            if (!accessHostname) return false;
             
             // Handle wildcard patterns
             if (urlPattern.includes('*')) {
-                const escapedPattern = urlPattern.replace(/\*/g, '.*');
-                const regex = new RegExp(escapedPattern, 'gi');
-                return regex.test(accessUrl);
+                // Convert wildcard pattern to regex
+                let regexPattern = urlPattern
+                    .replace(/\./g, '\\.')  // Escape dots
+                    .replace(/\*/g, '.*');   // Convert * to .*
+                
+                // If pattern doesn't start with *, add start anchor
+                if (!urlPattern.startsWith('*')) {
+                    regexPattern = '^' + regexPattern;
+                }
+                
+                // If pattern doesn't end with *, add end anchor
+                if (!urlPattern.endsWith('*')) {
+                    regexPattern = regexPattern + '$';
+                }
+                
+                const regex = new RegExp(regexPattern, 'i');
+                return regex.test(accessHostname);
             }
             
-            // Exact match
+            // Handle exact domain match
+            if (!urlPattern.includes('http')) {
+                // Remove protocol if present
+                const cleanPattern = urlPattern.replace(/^https?:\/\//, '');
+                return accessHostname === cleanPattern;
+            }
+            
+            // Handle full URL match
             return accessUrl === urlPattern;
+            
         } catch (error) {
             console.error('Error in matchingDomainRegex:', error);
             return false;
@@ -281,9 +318,11 @@ class URLUtils {
     }
 }
 
-// Export for use in other files
-window.ValidationUtils = ValidationUtils;
-window.SecurityUtils = SecurityUtils;
-window.IPUtils = IPUtils;
-window.ErrorHandler = ErrorHandler;
-window.URLUtils = URLUtils;
+// Export for use in other files (only in browser context)
+if (typeof window !== 'undefined') {
+    window.ValidationUtils = ValidationUtils;
+    window.SecurityUtils = SecurityUtils;
+    window.IPUtils = IPUtils;
+    window.ErrorHandler = ErrorHandler;
+    window.URLUtils = URLUtils;
+}

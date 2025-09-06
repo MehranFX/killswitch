@@ -17,6 +17,22 @@
 			<a id="add" href="#">ADD NEW RULE</a> 
 			<a id="save" href="#">SAVE RULES</a>
         </p>
+        <div style="margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 8px; text-align: left; max-width: 600px;">
+            <h3>🌐 Wildcard Support</h3>
+            <p><strong>You can use wildcards (*) in domain patterns:</strong></p>
+            <ul>
+                <li><code>*.example.com</code> - Matches all subdomains (api.example.com, www.example.com, etc.)</li>
+                <li><code>example.*</code> - Matches all TLDs (example.com, example.org, example.net, etc.)</li>
+                <li><code>*.example.*</code> - Matches all subdomains and TLDs</li>
+                <li><code>example.com</code> - Exact domain match only</li>
+            </ul>
+            <p><strong>Examples:</strong></p>
+            <ul>
+                <li><code>*.google.com</code> → matches: maps.google.com, drive.google.com, docs.google.com</li>
+                <li><code>*.github.io</code> → matches: username.github.io, project.github.io</li>
+                <li><code>api.*</code> → matches: api.example.com, api.test.org</li>
+            </ul>
+        </div>
     </div>
     <script type="text/javascript" src="../js/utils.js"></script>
     <script type="text/javascript" src="../js/settings.js"></script>

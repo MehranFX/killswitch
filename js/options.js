@@ -69,10 +69,11 @@ class OptionsManager {
             <div class="rule-item">
                 <p>
                     <strong>URL/Domain</strong><br>
-                    <input class="domain_regex" placeholder="Enter URL or domain (e.g., example.com)" value=""/><br>
+                    <input class="domain_regex" placeholder="Enter URL or domain (e.g., example.com, *.example.com)" value=""/><br>
                     <strong>ALLOWED IPS</strong> (separate with comma)<br>
                     <textarea class="ips" placeholder="Enter IP addresses (e.g., 192.168.1.1, 10.0.0.1)" style="width:100%; height:60px;"></textarea><br>
-                    <small>Use ! before IP to blacklist (e.g., !192.168.1.1)</small>
+                    <small>Use ! before IP to blacklist (e.g., !192.168.1.1)<br>
+                    Use * for wildcards (e.g., *.example.com matches all subdomains)</small>
                 </p>
             </div>
         `;

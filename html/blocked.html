@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Access Blocked - Kill Switch</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            margin: 20px;
+        }
+        .icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        p {
+            font-size: 1.2em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+        .ip-info {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+        .current-ip {
+            font-weight: bold;
+            color: #ffeb3b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🚫</div>
+        <h1>Kill Switch - Access Blocked</h1>
+        <p>This website has been blocked by Kill Switch extension based on your current IP address.</p>
+        
+        <div class="ip-info">
+            <strong>Blocked Domain:</strong> <span class="current-ip" id="blockedDomain">Loading...</span><br>
+            <strong>Current IP:</strong> <span class="current-ip" id="currentIP">Loading...</span><br>
+            <strong>Reason:</strong> Your IP is not in the allowed list for this domain.
+        </div>
+        
+        <p>To access this website, you need to add your current IP address to the whitelist in the extension settings.</p>
+        
+        <div class="buttons">
+            <button onclick="refreshIP()">🔄 Refresh IP</button>
+            <button onclick="openOptions()">⚙️ Manage Rules</button>
+            <button onclick="goBack()">← Go Back</button>
+        </div>
+    </div>
+
+    <script>
+        // Load current IP and blocked domain info
+        async function loadCurrentIP() {
+            try {
+                const response = await chrome.runtime.sendMessage({type: "refreshIP"});
+                if (response.success) {
+                    document.getElementById('currentIP').textContent = response.ip;
+                } else {
+                    document.getElementById('currentIP').textContent = 'Unable to load';
+                }
+            } catch (error) {
+                console.error('Error loading IP:', error);
+                document.getElementById('currentIP').textContent = 'Error loading IP';
+            }
+        }
+        
+        // Load blocked domain info
+        async function loadBlockedDomain() {
+            try {
+                // Get current tab ID
+                const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+                const tabId = tabs[0]?.id;
+                
+                if (tabId) {
+                    // Try to get the blocked URL from storage
+                    const result = await chrome.storage.local.get([`blockedUrl_${tabId}`]);
+                    const blockedUrl = result[`blockedUrl_${tabId}`];
+                    
+                    if (blockedUrl) {
+                        try {
+                            const url = new URL(blockedUrl);
+                            document.getElementById('blockedDomain').textContent = url.hostname;
+                            console.log('Loaded blocked domain from storage:', url.hostname);
+                        } catch (urlError) {
+                            document.getElementById('blockedDomain').textContent = blockedUrl;
+                        }
+                    } else {
+                        document.getElementById('blockedDomain').textContent = 'Unknown domain';
+                    }
+                } else {
+                    document.getElementById('blockedDomain').textContent = 'Unknown domain';
+                }
+            } catch (error) {
+                console.error('Error loading blocked domain:', error);
+                document.getElementById('blockedDomain').textContent = 'Unknown domain';
+            }
+        }
+
+        // Refresh IP
+        async function refreshIP() {
+            await loadCurrentIP();
+            // Also try to reload the page after IP refresh
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        }
+
+        // Open options page
+        function openOptions() {
+            chrome.runtime.openOptionsPage();
+        }
+
+        // Go back
+        function goBack() {
+            window.history.back();
+        }
+
+        // Load info on page load
+        loadCurrentIP();
+        loadBlockedDomain();
+    </script>
+</body>
+</html>
