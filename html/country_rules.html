@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title> </title>
+    <link href="https://fonts.googleapis.com/css?family=Dosis" rel="stylesheet">
+    <link rel="stylesheet" href="../css/options.css" />
+    <style>
+      html, body{ overflow-x: hidden; }
+      #content{ max-height: none !important; overflow: visible !important; }
+      .field-label{ font-size:12px; margin-bottom:4px; display:block; }
+      .cr-narrow{ width: 300px; max-width: 300px; }
+      .domain-row input{ width:300px; padding:10px 12px; font-size:15px; }
+      .dropdown{ position: relative; width:300px; }
+      .dropdown-toggle{ width:300px; text-align:left; padding:8px 10px; border:1px solid #ccc; border-radius:4px; background:#fff; font-size:14px; }
+      /* floating dropdown panel over content */
+      .dropdown-panel{ position:fixed; left:0; top:0; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,.15); z-index: 20000; max-height:260px; overflow-y:auto; overflow-x:hidden; display:none; }
+      .dropdown-search{ padding:8px; border-bottom:1px solid #eee; }
+      .dropdown-search input{ width:100%; padding:6px 8px; border:1px solid #ccc; border-radius:4px; font-size:13px; }
+      #cr_dd_list{ min-width:100%; }
+      .dd-item{ display:flex; align-items:center; gap:8px; padding:6px 10px; font-size:13px; white-space:nowrap; }
+      .dd-item:hover{ background:#f8f9fa; }
+      .top-close{ position:fixed; right:8px; top:6px; font-size:18px; color:#888; cursor:pointer; user-select:none; }
+      .top-close:hover{ color:#333; }
+      .status { margin: 10px auto; text-align: center; color: #28a745; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="top-close" id="cr_close">×</div>
+    <div align="center" id="message" class="status"></div>
+    <div id="content">
+      <div class="rule-item" style="text-align:left; overflow-x:hidden;">
+        <p style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+          <strong>Country rule</strong>
+          <a href="#" class="delete" style="margin-left:auto;">REMOVE RULE</a>
+        </p>
+        <div class="cr-narrow">
+          <label class="field-label" for="cr_domain_input">Domain</label>
+          <div class="domain-row">
+            <input id="cr_domain_input" type="text" placeholder="e.g., *.example.* or example.com" value="" />
+          </div>
+          <div class="mode-row" style="margin:6px 0 8px 0;">
+            <label><input type="radio" name="cr_mode" value="whitelist" checked> Whitelist</label>
+            <label style="margin-left:16px;"><input type="radio" name="cr_mode" value="blacklist"> Blacklist</label>
+          </div>
+          <label class="field-label">Select countries</label>
+          <div id="cr_dropdown" class="dropdown">
+            <button id="cr_dd_toggle" class="dropdown-toggle">Choose countries…</button>
+            <div id="cr_dd_panel" class="dropdown-panel">
+              <div class="dropdown-search"><input id="cr_dd_search" type="text" placeholder="Search..." /></div>
+              <div id="cr_dd_list"></div>
+            </div>
+          </div>
+          <small class="hint">You can select multiple countries from the dropdown.</small>
+        </div>
+      </div>
+
+      <div class="rule-item" style="text-align:left; overflow-x:hidden; margin-top:12px;">
+        <p style="margin-bottom:8px;"><strong>Saved country rules</strong></p>
+        <div id="cr_saved_list" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+    </div>
+    <div align="center">
+      <p>
+        <a id="cr_add" href="#">ADD NEW RULE</a>
+        <a id="cr_save_all" href="#">SAVE RULES</a>
+      </p>
+    </div>
+    <script type="text/javascript" src="../js/utils.js"></script>
+    <script type="text/javascript" src="../js/country_rules_page.js"></script>
+    <script>
+      document.getElementById('cr_close').onclick = () => window.close();
+    </script>
+  </body>
+ </html>
+
+

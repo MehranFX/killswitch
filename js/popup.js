@@ -600,10 +600,30 @@ class PopupManager {
             });
         }
 
+        // Country rule button → open dedicated country rules popup window (like My Rules)
+        const countryBtn = document.getElementById("country_rule");
+        if (countryBtn) {
+            countryBtn.addEventListener("click", async (e) => {
+                e.preventDefault();
+                const url = chrome.runtime.getURL('html/country_rules.html');
+                try {
+                    const w = 420, h = 640;
+                    // Center relative to current window to avoid other monitor
+                    const cur = await chrome.windows.getCurrent();
+                    const left = Math.max(0, Math.round((cur.left || 0) + ((cur.width || screen.availWidth) - w) / 2));
+                    const top = Math.max(0, Math.round((cur.top || 0) + ((cur.height || screen.availHeight) - h) / 2));
+                    await chrome.windows.create({ url, type: 'popup', width: w, height: h, left, top, focused: true });
+                } catch (_) {
+                    // Fallback to opening a new tab if popup creation is blocked
+                    chrome.tabs.create({ url });
+                }
+            });
+        }
+
         // Refresh IP button
-        const refreshIPBtn = document.getElementById("refresh_ip");
-        if (refreshIPBtn) {
-            refreshIPBtn.addEventListener("click", (e) => {
+        const refreshIcon = document.getElementById("refresh_icon");
+        if (refreshIcon) {
+            refreshIcon.addEventListener("click", (e) => {
                 e.preventDefault();
                 this.refreshIP({ manual: true });
             });
@@ -612,6 +632,8 @@ class PopupManager {
         // No extra debug/control buttons
 
     }
+
+    // Deprecated panel handler removed
 }
 
 // Legacy function for backward compatibility
