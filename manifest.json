@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
-	"name": "Kill Switch Enhanced",
-	"short_name": "Kill Switch",
+	"name": "Real Kill Switch",
+	"short_name": "Real Kill Switch",
 	"description": "An enhanced extension to prevent access to websites depending on your public IP address with improved security and user experience.",
 	"version": "2.1",
 	"version_name": "2.1 Enhanced",
@@ -41,7 +41,7 @@
 	"action": {
 		"default_icon": "/img/icon-48x48-grey.png",
 		"default_popup": "/html/popup.html",
-		"default_title": "Kill Switch Enhanced"
+		"default_title": "Real Kill Switch"
 	},
 	"content_security_policy": {
 		"extension_pages": "script-src 'self'; object-src 'self';"

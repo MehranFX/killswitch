@@ -1,17 +1,20 @@
 *{
-	font-family: 'Dosis', sans-serif;
-	color:#515151;
+	font-family: 'Dosis', Arial, Helvetica, sans-serif;
+	color:#444;
 }
 
 body{
 	overflow: hidden;
 	margin: 0;
 	padding: 20px;
+	font-size: 15px;
+	line-height: 1.6;
 }
 
 #content{
 	overflow-y: scroll;
 	max-height: 400px;
+	font-size: 15px;
 }
 
 .delete{
@@ -26,7 +29,8 @@ body{
 }
 
 textarea, .domain_regex{
-	font-family: sans-serif;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 14px;
 	width: 100%;
 	border: 1px solid #515151;
 	border-radius: 4px;
@@ -122,14 +126,14 @@ a:hover{
 
 .rule-item strong {
 	color: #2c3e50;
-	font-size: 14px;
+	font-size: 16px;
 }
 
 .rule-item small {
 	color: #6c757d;
-	font-size: 12px;
+	font-size: 13px;
 	display: block;
-	margin-top: 5px;
+	margin-top: 6px;
 }
 
 /* No rules message */

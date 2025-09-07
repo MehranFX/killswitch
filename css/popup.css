@@ -111,3 +111,6 @@ button:disabled {
 .button-group button {
 	margin: 2px 0;
 }
+
+/* Inline gear icon using mask to allow color control */
+/* removed masked gear icon to show raw image colors */
