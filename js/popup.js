@@ -123,7 +123,7 @@ class PopupManager {
     /**
      * Refresh IP and update display
      */
-    static async refreshIP() {
+    static async refreshIP(options = { manual: false }) {
         // Prevent multiple simultaneous refreshes
         if (this.isRefreshing) {
             console.log('⏳ Refresh already in progress, skipping...');
@@ -133,6 +133,9 @@ class PopupManager {
         try {
             this.isRefreshing = true;
             this.showLoading(true);
+            // Update status immediately
+            const statusElement = document.getElementById('ip_status_text');
+            if (statusElement) statusElement.textContent = 'Refreshing...';
             console.log('🔄 Starting IP refresh...');
             
             // Send refresh message to background with timeout
@@ -147,9 +150,13 @@ class PopupManager {
             
             if (response && response.success) {
                 console.log('✅ IP refresh response successful:', response);
-                this.showMessage('IP refreshed successfully!', 'success');
+                if (options.manual) {
+                    this.showMessage('IP refreshed successfully!', 'success');
+                }
                 // Update display
                 await this.updateIPDisplay();
+                // Recompute countdown immediately after refresh
+                this.updateCountdown();
                 console.log('✅ IP refresh completed successfully');
             } else {
                 console.error('❌ IP refresh failed:', response);
@@ -403,8 +410,8 @@ class PopupManager {
 
             if (timeUntilUpdate <= 0) {
                 countdownElement.textContent = '00:00';
-                statusElement.textContent = 'Ready for update';
-                statusElement.style.color = '#ff9800';
+                statusElement.textContent = this.isRefreshing ? 'Refreshing...' : 'Ready to update';
+                statusElement.style.color = this.isRefreshing ? '#2196F3' : '#ff9800';
                 
                 // Auto-refresh IP when countdown reaches zero (only if not already refreshing)
                 if (!this.isRefreshing) {
@@ -417,7 +424,7 @@ class PopupManager {
                 const minutes = Math.floor(timeUntilUpdate / 60000);
                 const seconds = Math.floor((timeUntilUpdate % 60000) / 1000);
                 countdownElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                statusElement.textContent = 'Active';
+                statusElement.textContent = 'Cached';
                 statusElement.style.color = '#4CAF50';
             }
         });
@@ -569,7 +576,7 @@ class PopupManager {
         if (refreshIPBtn) {
             refreshIPBtn.addEventListener("click", (e) => {
                 e.preventDefault();
-                this.refreshIP();
+                this.refreshIP({ manual: true });
             });
         }
 
