@@ -1,3 +1,9 @@
+## 2.1 (Minor)
+- Respect system/direct proxy strictly: clear PAC when mode is `system` or `direct`.
+- Do not override existing system PAC unless blocking domains exist (sinkhole only).
+- IP detection stabilized via multi-probe fetch (no tab-based reads).
+- Added diagnostic snapshot `debugProxy` and improved proxy logs.
+
 # Kill Switch Enhanced - Changelog
 
 ## Version 2.0 - Enhanced Edition

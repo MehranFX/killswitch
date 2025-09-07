@@ -6,6 +6,8 @@
 
 class PopupManager {
     static isRefreshing = false; // Flag to prevent multiple simultaneous refreshes
+    static refreshWatchTimer = null;
+    static suppressStorageUpdates = false;
     
     /**
      * Store URL with enhanced validation and error handling
@@ -137,6 +139,18 @@ class PopupManager {
             const statusElement = document.getElementById('ip_status_text');
             if (statusElement) statusElement.textContent = 'Refreshing...';
             console.log('🔄 Starting IP refresh...');
+            // hide current IP to avoid flicker
+            const ipEl = document.getElementById('current_ip');
+            if (ipEl) ipEl.textContent = '...';
+            this.suppressStorageUpdates = true;
+            // Watchdog to restore UI if background doesn't respond
+            if (this.refreshWatchTimer) clearTimeout(this.refreshWatchTimer);
+            this.refreshWatchTimer = setTimeout(() => {
+                this.isRefreshing = false;
+                this.showLoading(false);
+                const s = document.getElementById('ip_status_text');
+                if (s) s.textContent = 'Ready to update';
+            }, 15000);
             
             // Send refresh message to background with timeout
             const response = await Promise.race([
@@ -154,7 +168,7 @@ class PopupManager {
                     this.showMessage('IP refreshed successfully!', 'success');
                 }
                 // Update display
-                await this.updateIPDisplay();
+                await this.updateIPDisplay({ highlight: true });
                 // Recompute countdown immediately after refresh
                 this.updateCountdown();
                 console.log('✅ IP refresh completed successfully');
@@ -168,6 +182,9 @@ class PopupManager {
         } finally {
             this.isRefreshing = false;
             this.showLoading(false);
+            if (this.refreshWatchTimer) { clearTimeout(this.refreshWatchTimer); this.refreshWatchTimer = null; }
+            // re-enable storage driven updates
+            this.suppressStorageUpdates = false;
         }
     }
 
@@ -343,31 +360,32 @@ class PopupManager {
     /**
      * Update IP display in popup
      */
-    static async updateIPDisplay() {
+    static async updateIPDisplay(options = { highlight: false }) {
         try {
             console.log('🔄 Updating IP display...');
             
             // Get IP from storage directly
-            const result = await chrome.storage.local.get(['current_ip', 'cachedIP']);
+            const result = await chrome.storage.local.get(['current_ip', 'cachedIP', 'ip_flag']);
             const ip = result.current_ip || result.cachedIP;
             const ipElement = document.getElementById('current_ip');
+            const flag = result.ip_flag || '';
             
             console.log('📋 Storage result:', result);
             console.log('🔍 Extracted IP:', ip);
             
             if (ipElement) {
-                const oldIP = ipElement.textContent;
-                ipElement.textContent = ip || 'Loading...';
-                console.log(`✅ IP element updated: "${oldIP}" → "${ip}"`);
+                const oldText = ipElement.textContent;
+                ipElement.textContent = `${flag ? flag + ' ' : ''}${ip || 'Loading...'}`;
+                console.log(`✅ IP element updated: "${oldText}" → "${ip}"`);
                 
-                // Add visual feedback for IP change
-                if (ip && oldIP !== ip && oldIP !== 'Loading...' && oldIP !== 'Error') {
+                // Highlight only when explicitly requested (end of refresh)
+                if (options.highlight && ip) {
                     ipElement.style.backgroundColor = '#4CAF50';
                     ipElement.style.color = 'white';
                     setTimeout(() => {
                         ipElement.style.backgroundColor = '#f0f0f0';
                         ipElement.style.color = 'black';
-                    }, 2000);
+                    }, 1500);
                 }
             } else {
                 console.error('❌ IP element not found!');
@@ -455,10 +473,7 @@ class PopupManager {
                 this.updateCountdown();
             }, 1000);
             
-            // Set up periodic IP refresh (every 5 seconds)
-            setInterval(() => {
-                this.updateIPDisplay();
-            }, 5000);
+            // Remove periodic highlight-causing refresh; rely on storage listener and countdown
             
             // Set up storage listener for real-time updates
             this.setupStorageListener();
@@ -485,8 +500,12 @@ class PopupManager {
             
             // Check if IP was updated
             if (changes.current_ip || changes.cachedIP) {
-                console.log('🔄 IP updated in storage, refreshing display...');
-                this.updateIPDisplay();
+                if (this.suppressStorageUpdates) {
+                    console.log('⏸ Suppressing IP update during manual refresh');
+                } else {
+                    console.log('🔄 IP updated in storage, refreshing display...');
+                    this.updateIPDisplay();
+                }
             }
             
             // Check if last update time changed
@@ -568,6 +587,16 @@ class PopupManager {
             rulesBtn.addEventListener("click", (e) => {
                 e.preventDefault();
                 chrome.runtime.openOptionsPage();
+            });
+        }
+
+        // Settings gear button → open dedicated settings page
+        const settingsBtn = document.getElementById("settings_btn");
+        if (settingsBtn) {
+            settingsBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                const url = chrome.runtime.getURL('html/settings.html');
+                chrome.tabs.create({ url });
             });
         }
 

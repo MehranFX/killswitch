@@ -3,8 +3,8 @@
 	"name": "Kill Switch Enhanced",
 	"short_name": "Kill Switch",
 	"description": "An enhanced extension to prevent access to websites depending on your public IP address with improved security and user experience.",
-	"version": "2.0",
-	"version_name": "2.0 Enhanced",
+	"version": "2.1",
+	"version_name": "2.1 Enhanced",
     "author": "github.com/maxisme",
 	"background": {
 		"service_worker": "background.js"

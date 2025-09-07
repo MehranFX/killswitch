@@ -63,31 +63,34 @@ class IPUtils {
     static IP_SERVICES = [
         'https://api.ipify.org',
         'https://ipapi.co/ip/',
-        'https://api.myip.com',
-        'https://ipinfo.io/ip'
+        'https://ifconfig.me/ip',
+        'https://ipinfo.io/ip',
+        'https://icanhazip.com'
     ];
 
     static IP_CACHE_DURATION = 30 * 1000; // 30 seconds
 
     static async getPublicIP() {
-        for (const service of this.IP_SERVICES) {
+        for (const base of this.IP_SERVICES) {
+            const url = base.includes('?') ? `${base}&_=${Date.now()}` : `${base}?_=${Date.now()}`;
             try {
-                const response = await fetch(service, {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 4000);
+                const response = await fetch(url, {
                     method: 'GET',
-                    timeout: 5000
+                    headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+                    signal: controller.signal
                 });
-                
-                if (response.ok) {
-                    const ip = (await response.text()).trim();
-                    if (ValidationUtils.isValidIP(ip)) {
-                        return ip;
-                    }
-                }
-            } catch (error) {
-                console.warn(`Failed to get IP from ${service}:`, error);
+                clearTimeout(timer);
+                if (!response.ok) continue;
+                const text = (await response.text()).trim();
+                const ip = text.replace(/[^0-9A-Fa-f:\.]/g, '');
+                if (ValidationUtils.isValidIP(ip)) return ip;
+            } catch (_) {
+                // try next service
             }
         }
-        throw new Error('All IP services failed');
+        throw new Error('Failed to fetch public IP from all services');
     }
 
     static async getCachedIP() {
@@ -131,6 +134,50 @@ class IPUtils {
             console.error('Error getting fresh IP:', error);
             throw error;
         }
+    }
+
+    /**
+     * Get country code for an IP (e.g., "US")
+     */
+    static async getCountryCode(ip) {
+        const endpoints = [
+            `https://ipapi.co/${ip}/country/`,
+            `https://ipinfo.io/${ip}/country`,
+            `https://ipwho.is/${ip}`
+        ];
+        for (const url of endpoints) {
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 5000);
+                const res = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeout);
+                if (!res.ok) continue;
+                if (url.includes('ipwho.is')) {
+                    const data = await res.json();
+                    if (data && data.success && data.country_code) {
+                        return (data.country_code || '').toUpperCase();
+                    }
+                } else {
+                    const text = (await res.text()).trim();
+                    if (text && text.length <= 3) return text.toUpperCase();
+                }
+            } catch (_) {
+                // ignore and try next
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Convert ISO country code to emoji flag
+     */
+    static countryCodeToFlag(countryCode) {
+        if (!countryCode || countryCode.length !== 2) return '';
+        const A = 0x1F1E6;
+        const code = countryCode.toUpperCase();
+        const first = A + (code.charCodeAt(0) - 65);
+        const second = A + (code.charCodeAt(1) - 65);
+        return String.fromCodePoint(first) + String.fromCodePoint(second);
     }
 
     /**
@@ -213,42 +260,25 @@ class URLUtils {
      */
     static domainToRegex(domain) {
         if (!domain || typeof domain !== 'string') return '';
-        
-        console.log(`🔧 Converting domain to regex: ${domain}`);
-        
-        // Handle wildcards
-        if (domain.includes('*')) {
-            // For *.binance.* pattern, we want to match:
-            // - www.binance.com
-            // - api.binance.com  
-            // - binance.org
-            // - etc.
-            
-            if (domain === '*.binance.*') {
-                // Special case for binance
-                const finalRegex = `^https?://.*binance\\.[^/]+/.*`;
-                console.log(`🎯 Generated regex for ${domain}: ${finalRegex}`);
-                return finalRegex;
-            }
-            
-            // General wildcard handling
-            let regexPattern = domain;
-            
-            // Replace * with appropriate regex patterns
-            regexPattern = regexPattern.replace(/\./g, '\\.');  // Escape dots
-            regexPattern = regexPattern.replace(/\\\.\*/g, '\\.[^./]+');  // Replace .* with .[^./]+
-            regexPattern = regexPattern.replace(/^\*/, '[^./]*');  // Replace leading * 
-            regexPattern = regexPattern.replace(/\*$/, '[^./]*');  // Replace trailing *
-            
-            const finalRegex = `^https?://.*${regexPattern}/.*`;
-            console.log(`🎯 Generated regex for ${domain}: ${finalRegex}`);
-            return finalRegex;
+        const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        let regex;
+        if (domain === '*.binance.*') {
+            regex = '^https?://([^/]*\\.)?binance\\.[^/]+/';
+        } else if (domain.startsWith('*.') && domain.endsWith('.*')) {
+            const mid = esc(domain.slice(2, -2));
+            regex = `^https?://([^/]*\\.)?${mid}\\.[^/]+/`;
+        } else if (domain.startsWith('*.')) {
+            const base = esc(domain.slice(2));
+            regex = `^https?://([^/]*\\.)?${base}/`;
+        } else if (domain.endsWith('.*')) {
+            const pre = esc(domain.slice(0, -2));
+            regex = `^https?://([^/]*\\.)?${pre}\\.[^/]+/`;
         } else {
-            // Return regex for exact domain match
-            const finalRegex = `^https?://(www\\.)?${domain.replace(/\./g, '\\.')}/.*`;
-            console.log(`🎯 Generated regex for ${domain}: ${finalRegex}`);
-            return finalRegex;
+            const exact = esc(domain);
+            regex = `^https?://([^/]*\\.)?${exact}/`;
         }
+        console.log(`🎯 DNR regex for ${domain}: ${regex}`);
+        return regex;
     }
 
     static matchingDomainRegex(accessUrl, urlPattern) {
@@ -320,6 +350,42 @@ class BackgroundManager {
             console.log('Storage updated successfully');
         } catch (error) {
             await ErrorHandler.handle(error, 'updateLocalStorage');
+        }
+    }
+
+    /**
+     * Apply minimal routing before IP detection so getPublicIP uses the intended path
+     */
+    static _bootstrapAppliedTs = 0;
+    static async applyBootstrapProxyRouting() {
+        try {
+            // Debounce to avoid rapid toggling
+            const now = Date.now();
+            if (now - this._bootstrapAppliedTs < 1500) return;
+            const settings = await chrome.storage.local.get(['fallback_proxy']);
+            const useFallback = false; // removed manual toggle; auto-handled below
+            const blockedDomains = this._blockedDomains ? Array.from(this._blockedDomains) : [];
+            if (useFallback || (blockedDomains && blockedDomains.length > 0)) {
+                const currentIP = await IPUtils.getCachedIP().catch(()=>null) || '';
+                const storageData = await chrome.storage.local.get(['urls','allowed_ips']);
+                const whitelistData = [];
+                const storedUrls = storageData.urls || [];
+                const storedIPs = storageData.allowed_ips || [];
+                for (let i=0;i<storedUrls.length;i++){
+                    const allowedIPsString = storedIPs[i] || '';
+                    const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
+                    whitelistData.push({ domain: storedUrls[i], allowedIPs });
+                }
+                const pacScript = this.generatePACScript(blockedDomains, currentIP, whitelistData, useFallback?settings.fallback_proxy:'');
+                const proxyConfig = { mode: 'pac_script', pacScript: { data: pacScript } };
+                await chrome.proxy.settings.set({ value: proxyConfig, scope: 'regular' });
+                this._bootstrapAppliedTs = now;
+            } else {
+                await chrome.proxy.settings.clear({});
+                this._bootstrapAppliedTs = now;
+            }
+        } catch (e) {
+            console.warn('Bootstrap routing error:', e);
         }
     }
 
@@ -499,26 +565,126 @@ class BackgroundManager {
     static async updateIPAndRules() {
         console.log('🔄 Updating IP and rules...');
         try {
-            // Get fresh IP
-            const freshIP = await IPUtils.getFreshIP();
+            // 1) Get a STABLE IP (multiple probes to avoid flicker)
+            const freshIP = await this.getStablePublicIP();
+            // Store IP and flag atomically
+            const now = Date.now();
+            const country = await IPUtils.getCountryCode(freshIP).catch(()=> '');
+            const flag = IPUtils.countryCodeToFlag(country);
+            await chrome.storage.local.set({
+                current_ip: freshIP,
+                cachedIP: freshIP,
+                ipTimestamp: now,
+                last_ip_update: now,
+                ip_country: country,
+                ip_flag: flag
+            });
             console.log(`✅ IP updated to: ${freshIP}`);
             
             // Verify IP was stored
-            const stored = await chrome.storage.local.get(['current_ip', 'cachedIP', 'last_ip_update']);
+            const stored = await chrome.storage.local.get(['current_ip', 'cachedIP', 'last_ip_update', 'ip_country', 'ip_flag']);
             console.log('📋 Stored IP data:', stored);
             
-            // Update rules based on new IP
+            // 3) Update rules based on new IP
             await this.setupCachedRules();
-            await this.setupProxyBlocking();
+            // 4) Rebuild immediate blocking rules (DNR) first to catch navigation ASAP
+            await this.setupDeclarativeNetRequest();
+            // 5) Then (re)apply proxy/PAC routing based on the same rules
+            const pacApplied = await this.setupProxyBlocking();
             
-            // Ensure no stale declarativeNetRequest dynamic rules remain
-            await this.clearDynamicRules();
+            // اگر PAC فعال شد، دیگر نیازی به DNR نیست؛ در غیر این صورت (مد system) DNR را نگه می‌داریم
+            if (pacApplied) {
+                await this.clearDynamicRules();
+            }
             
             console.log('✅ IP and rules update completed');
             
         } catch (error) {
             console.error('❌ Failed to update IP and rules:', error);
+            try { await chrome.proxy.settings.clear({}); } catch {}
         }
+    }
+
+    /**
+     * Get current public IP by executing fetch inside the ACTIVE TAB context
+     * so the exact browser routing (system proxy/PAC) is respected.
+     */
+    static async getIPViaActiveTab() {
+        try {
+            let tabs = await chrome.tabs.query({active: true, currentWindow: true});
+            let tab = tabs && tabs[0];
+            // اگر تب فعال http(s) نبود، بین تمام تب‌ها یکی را پیدا کن
+            if (!tab || !tab.id || !tab.url || !/^https?:/i.test(tab.url)) {
+                const allTabs = await chrome.tabs.query({});
+                tab = allTabs.find(t => t && t.id && t.url && /^https?:/i.test(t.url));
+            }
+            if (!tab || !tab.id || !tab.url || !/^https?:/i.test(tab.url)) {
+                throw new Error('No http(s) tab found');
+            }
+            const [{ result }] = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => {
+                    return new Promise(async (resolve) => {
+                        try {
+                            const controller = new AbortController();
+                            const t = setTimeout(() => controller.abort(), 5000);
+                            const res = await fetch('https://api.ipify.org?format=json', {
+                                cache: 'no-store',
+                                headers: { 'Cache-Control': 'no-cache' },
+                                signal: controller.signal
+                            });
+                            clearTimeout(t);
+                            const data = await res.json().catch(()=>({}));
+                            resolve((data && data.ip) || '');
+                        } catch (e) {
+                            resolve('');
+                        }
+                    });
+                }
+            });
+            const ip = (result || '').trim();
+            if (!ip) throw new Error('Empty IP from tab');
+            return ip;
+        } catch (e) {
+            console.warn('Active-tab IP fetch failed:', e.message || e);
+            throw e;
+        }
+    }
+
+    /**
+     * Probe public IP several times and return a stable value to avoid flicker
+     */
+    static async getStablePublicIP() {
+        // فقط بر اساس fetch (بدون تب) + هیسترزیس مقابل سوییچ سریع
+        const probe = async () => {
+            try {
+                const ip = await IPUtils.getPublicIP();
+                if (ValidationUtils.isValidIP(ip)) return ip;
+            } catch {}
+            return '';
+        };
+        const p1 = await probe();
+        await new Promise(r => setTimeout(r, 300));
+        const p2 = await probe();
+        if (p1 && p1 === p2) return p2;
+        await new Promise(r => setTimeout(r, 300));
+        const p3 = await probe();
+        const arr = [p1, p2, p3].filter(Boolean);
+        if (arr.length === 0) throw new Error('IP probes failed');
+        const counts = arr.reduce((m, v) => { m[v] = (m[v] || 0) + 1; return m; }, {});
+        let best = arr[arr.length - 1];
+        for (const k in counts) { if (counts[k] >= 2) { best = k; break; } }
+        // Hysteresis: اگر با مقدار قبلی متفاوت است، فقط هر 20 ثانیه اجازهٔ تغییر بده
+        try {
+            const st = await chrome.storage.local.get(['current_ip','cachedIP','ip_last_switch_ts']);
+            const previousIP = st.current_ip || st.cachedIP || '';
+            const lastSwitch = st.ip_last_switch_ts || 0;
+            const now = Date.now();
+            if (previousIP && previousIP !== best && (now - lastSwitch) < 20000) {
+                return previousIP;
+            }
+        } catch {}
+        return best;
     }
 
     /**
@@ -548,12 +714,15 @@ class BackgroundManager {
             
             // Set up cached rules for sync access
             await this.setupCachedRules();
+            // Build immediate blocking rules (DNR) to avoid late blocking
+            await this.setupDeclarativeNetRequest();
+            // Set up DNS level proxy routing
+            const pacAppliedInit = await this.setupProxyBlocking();
             
-            // Set up DNS level proxy blocking
-            await this.setupProxyBlocking();
-            
-            // Ensure no stale declarativeNetRequest dynamic rules remain
-            await this.clearDynamicRules();
+            // اگر PAC فعال شد، قوانین DNR را پاک می‌کنیم
+            if (pacAppliedInit) {
+                await this.clearDynamicRules();
+            }
             
             // Force refresh proxy settings with delay
             setTimeout(async () => {
@@ -598,12 +767,6 @@ class BackgroundManager {
                 periodInMinutes: 0.5  // هر 30 ثانیه تکرار
             });
             
-            // Create an alarm to clear proxy every 2 minutes
-            chrome.alarms.create('clearProxy', {
-                delayInMinutes: 2,    // 2 دقیقه تاخیر اولیه
-                periodInMinutes: 2    // هر 2 دقیقه تکرار
-            });
-
             // Add a listener for when the alarm fires
             chrome.alarms.onAlarm.addListener(this.handleAlarm.bind(this));
             console.log('✅ Alarms set up.');
@@ -625,9 +788,6 @@ class BackgroundManager {
         if (alarm.name === 'refreshIP') {
             console.log('⏰ Alarm triggered: refreshIP');
             await this.updateIPAndRules();
-        } else if (alarm.name === 'clearProxy') {
-            console.log('⏰ Alarm triggered: clearProxy');
-            await this.forceClearProxyOnStartup();
         }
     }
 
@@ -674,7 +834,11 @@ class BackgroundManager {
             
             // Get current proxy settings
             const settings = await chrome.proxy.settings.get({});
-            console.log('📋 Current proxy settings:', settings);
+            try {
+                console.log('📋 Current proxy settings (raw):', JSON.stringify(settings, null, 2));
+            } catch (_) {
+                console.log('📋 Current proxy settings:', settings);
+            }
             
             // Force a refresh by setting the same settings again
             if (settings.value && settings.value.mode === 'pac_script') {
@@ -692,11 +856,34 @@ class BackgroundManager {
     }
 
     /**
+     * Dump proxy settings and active tab context for diagnostics
+     */
+    static async dumpProxySnapshot() {
+        try {
+            const settings = await chrome.proxy.settings.get({});
+            const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+            const activeTab = tabs && tabs[0] ? { id: tabs[0].id, url: tabs[0].url, status: tabs[0].status } : null;
+            const snapshot = {
+                ts: new Date().toISOString(),
+                proxySettings: settings,
+                activeTab,
+            };
+            try { console.log('🧪 Proxy snapshot:', JSON.stringify(snapshot, null, 2)); } catch { console.log('🧪 Proxy snapshot:', snapshot); }
+            await chrome.storage.local.set({ proxy_snapshot: snapshot });
+            return snapshot;
+        } catch (e) {
+            console.warn('Proxy snapshot failed:', e);
+            return null;
+        }
+    }
+
+    /**
      * Set up detection for requests blocked by the proxy.
      * When a request fails because of our proxy, we redirect the tab to our custom block page.
      */
     static setupBlockedRequestDetection() {
         console.log('🔧 Setting up blocked request detection...');
+        this._proxyErrorCount = 0;
         chrome.webRequest.onErrorOccurred.addListener(
             async (details) => {
                 console.log('🔍 ===== WEBREQUEST ERROR DETECTED =====');
@@ -713,6 +900,18 @@ class BackgroundManager {
 
                 if (proxyErrors.includes(details.error) && details.tabId > 0) {
                     console.log(`🚫 Proxy error detected for ${details.url}. Error: ${details.error}`);
+                    // Auto-recovery: if fallback is enabled and repeated proxy errors occur, disable and clear
+                    const cfg = await chrome.storage.local.get(['fallback_enabled']);
+                    if (cfg.fallback_enabled) {
+                        this._proxyErrorCount = (this._proxyErrorCount || 0) + 1;
+                        clearTimeout(this._proxyErrorTimer);
+                        this._proxyErrorTimer = setTimeout(()=>{ this._proxyErrorCount = 0; }, 3000);
+                        if (this._proxyErrorCount >= 3) {
+                            console.warn('⚠️ Repeated proxy failures detected. Disabling fallback and clearing proxy.');
+                            await this.recoverFromProxyFailure();
+                            this._proxyErrorCount = 0;
+                        }
+                    }
                     
                     // Check if this URL should actually be blocked by our rules (async version)
                     const shouldBlock = await this.shouldBlockURL(details.url);
@@ -744,6 +943,37 @@ class BackgroundManager {
             { urls: ["<all_urls>"] }
         );
         console.log('✅ Blocked request detection is active.');
+
+        // Optional basic WebRTC leak mitigation when enabled
+        chrome.storage.local.get(['webrtc_protect'], (cfg) => {
+            if (!cfg.webrtc_protect) return;
+            try {
+                // Limit WebRTC with privacy API where available
+                if (chrome.privacy && chrome.privacy.network) {
+                    if (chrome.privacy.network.webRTCIPHandlingPolicy) {
+                        chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: 'default_public_interface_only' });
+                    }
+                    if (chrome.privacy.network.webRTCMultipleRoutesEnabled) {
+                        chrome.privacy.network.webRTCMultipleRoutesEnabled.set({ value: false });
+                    }
+                }
+            } catch (e) {
+                console.warn('WebRTC privacy controls not available:', e);
+            }
+        });
+    }
+
+    /**
+     * Emergency recovery: disable fallback and clear proxy settings
+     */
+    static async recoverFromProxyFailure() {
+        try {
+            await chrome.storage.local.set({ fallback_enabled: false });
+            await chrome.proxy.settings.clear({});
+            console.log('🧯 Recovery applied: fallback disabled and proxy cleared');
+        } catch (e) {
+            console.error('Recovery failed:', e);
+        }
     }
 
 
@@ -1031,112 +1261,80 @@ class BackgroundManager {
      */
     static async setupProxyBlocking() {
         try {
-            console.log('🔧 Setting up DNS level proxy blocking...');
-            
-            // Always set up PAC script, even if no domains are blocked
-            // This ensures we can handle whitelist logic properly
-            
-            // Check if current IP is in whitelist for any domain
+            console.log('🔧 Setting PAC for reliable, DNS-level blocking...');
+
+            // Gather inputs
             const currentIP = await IPUtils.getCachedIP();
-            const storageData = await chrome.storage.local.get(['urls', 'allowed_ips']);
-            const storedUrls = storageData.urls || [];
-            const storedIPs = storageData.allowed_ips || [];
-            
-            // current IP and whitelist logic
-            
-            // Create whitelist data for PAC script
+            const { urls = [], allowed_ips = [] } = await chrome.storage.local.get(['urls', 'allowed_ips']);
+
+            // Build whitelist data (domain → allowed IPs)
             const whitelistData = [];
-            for (let i = 0; i < storedUrls.length; i++) {
-                const domain = storedUrls[i];
-                const allowedIPsString = storedIPs[i] || '';
+            for (let i = 0; i < urls.length; i++) {
+                const domain = urls[i];
+                const allowedIPsString = allowed_ips[i] || '';
                 const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
-                
-                // domain allowed IPs collected
-                
-                whitelistData.push({
-                    domain: domain,
-                    allowedIPs: allowedIPs
-                });
+                whitelistData.push({ domain, allowedIPs });
             }
-            
-            // Build whitelist data for PAC script
-            
-            // Force clear proxy settings first
+
+            // Blocked domains generated previously in setupCachedRules
+            const blockedDomains = this._blockedDomains ? Array.from(this._blockedDomains) : [];
+
+            // Fallback proxy (optional) or auto-derive from system when possible
+            const { fallback_proxy = '' } = await chrome.storage.local.get(['fallback_proxy']);
+            let fallback = '';
             try {
-                for (let i = 0; i < 3; i++) {
+                const sys = await chrome.proxy.settings.get({});
+                const mode = sys?.value?.mode;
+                // Map Chrome proxy scheme to PAC keyword
+                const toPacToken = (p) => {
+                    if (!p || !p.host || !p.port) return '';
+                    const scheme = (p.scheme || '').toLowerCase();
+                    if (scheme === 'https') return `HTTPS ${p.host}:${p.port}`;
+                    if (scheme === 'socks5') return `SOCKS5 ${p.host}:${p.port}`;
+                    if (scheme === 'socks' || scheme === 'socks4') return `SOCKS ${p.host}:${p.port}`;
+                    // default http
+                    return `PROXY ${p.host}:${p.port}`;
+                };
+                if (mode === 'fixed_servers' && sys.value?.rules) {
+                    const rules = sys.value.rules;
+                    const pick = rules.singleProxy || rules.proxyForHttp || rules.proxyForHttps || rules.fallbackProxy;
+                    const pacTok = toPacToken(pick);
+                    if (pacTok) fallback = pacTok;
+                } else if (mode === 'direct' || mode === 'system') {
+                    // Always respect system/direct: never set PAC; rely on DNR when needed
                     await chrome.proxy.settings.clear({});
-                    console.log(`✅ Clear attempt ${i + 1}`);
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                }
-                
-                // Wait a bit before setting PAC script
-                await new Promise(resolve => setTimeout(resolve, 500));
-                console.log('⏳ Waiting before setting PAC script...');
-            } catch (error) {
-                console.error('❌ Error clearing proxy settings:', error);
-            }
-            
-            // Check if current IP is in whitelist for ANY domain
-            let shouldUseDirect = false;
-            // checking whitelist
-            
-            for (let i = 0; i < storedUrls.length; i++) {
-                const domain = storedUrls[i];
-                const allowedIPsString = storedIPs[i] || '';
-                const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
-                
-                // comparing current IP with allowed list for domain
-                
-                if (allowedIPs.includes(currentIP)) {
-                    // current IP is whitelisted for this domain
-                    shouldUseDirect = true;
-                    break;
-                }
-            }
-            
-            if (shouldUseDirect) {
-                // Use direct connection for whitelisted IPs
-                const proxyConfig = {
-                    mode: 'direct'
-                };
-                
-                await chrome.proxy.settings.set({
-                    value: proxyConfig,
-                    scope: 'regular'
-                });
-                
-                console.log('✅ Direct connection set for whitelisted IP');
-            } else {
-                // Use PAC script for non-whitelisted IPs
-                const blockedDomains = this._blockedDomains ? Array.from(this._blockedDomains) : [];
-                const pacScript = this.generatePACScript(blockedDomains, currentIP, whitelistData);
-                
-                const proxyConfig = {
-                    mode: 'pac_script',
-                    pacScript: {
-                        data: pacScript
+                    console.log('ℹ️ Respecting system/direct proxy mode. PAC cleared. Mode:', mode);
+                    return false;
+                } else if (mode === 'pac_script') {
+                    // When user/system already has PAC, do not override unless we must block domains via sinkhole
+                    if (blockedDomains.length === 0) {
+                        console.log('ℹ️ System PAC present and no blocked domains; leaving as-is.');
+                        return false;
                     }
-                };
-                
-                await chrome.proxy.settings.set({
-                    value: proxyConfig,
-                    scope: 'regular'
-                });
-                
-                console.log('✅ PAC script set for non-whitelisted IP');
+                }
+                // If system proxy not detectable but user provided fallback_proxy, use it
+                // IMPORTANT: در حالت system/direct، از fallback کاربر استفاده نمی‌کنیم تا وقتی سیستم پروکسی خاموش است، مسیر DIRECT بماند
+            } catch (e) {
+                console.warn('Proxy settings read failed:', e);
             }
-            
-            console.log('✅ DNS level proxy blocking set up');
+
+            // Generate and apply PAC
+            const pacScript = this.generatePACScript(blockedDomains, currentIP, whitelistData, fallback);
+            const proxyConfig = { mode: 'pac_script', pacScript: { data: pacScript } };
+            await chrome.proxy.settings.set({ value: proxyConfig, scope: 'regular' });
+            console.log('✅ PAC applied');
+            return true;
             
         } catch (error) {
             console.error('❌ Error setting up proxy blocking:', error);
+            return false;
         }
     }
 
     /**
      * Generate PAC script for redirecting blocked domains
      */
-    static generatePACScript(blockedDomains, currentIP, whitelistData) {
+    static generatePACScript(blockedDomains, currentIP, whitelistData, fallbackProxy = '') {
         const blockedDomainsArray = JSON.stringify(blockedDomains);
         const blockedPageUrl = chrome.runtime.getURL('html/blocked.html');
         const whitelistDataStr = JSON.stringify(whitelistData);
@@ -1151,6 +1349,8 @@ function FindProxyForURL(url, host) {
     var blockedDomains = ${blockedDomainsArray};
     var whitelistData = ${whitelistDataStr};
     var currentIP = "${currentIP}";
+    var fallbackProxy = ${JSON.stringify(fallbackProxy)};
+    var ipCheckHosts = ["api.ipify.org","ipapi.co","ipinfo.io","icanhazip.com","ifconfig.me"];
     
     // Check if this is already our blocked page - allow it
     if (url.indexOf("${blockedPageUrl}") === 0) {
@@ -1210,16 +1410,32 @@ function FindProxyForURL(url, host) {
             for (var j = 0; j < allowedIPs.length; j++) {
                 if (allowedIPs[j] === currentIP) {
                     console.log("PAC: ALLOWING (IP in whitelist):", host, "IP:", currentIP);
+                    if (fallbackProxy && fallbackProxy.length > 0) {
+                        return fallbackProxy;
+                    }
                     return "DIRECT";
                 }
             }
             console.log("PAC: BLOCKING (IP not in whitelist):", host, "IP:", currentIP);
+            // Always sinkhole blocked domains to prevent load regardless of proxy
             return "PROXY 127.0.0.1:1";
         }
     }
     
+    // Force IP check endpoints through proxy when available
+    for (var k = 0; k < ipCheckHosts.length; k++) {
+        var h = ipCheckHosts[k];
+        if (host === h || host.endsWith('.' + h)) {
+            if (fallbackProxy && fallbackProxy.length > 0) {
+                return fallbackProxy;
+            }
+        }
+    }
     console.log("PAC: ALLOWING (no domain match):", host);
     console.log("PAC: ===== PAC SCRIPT COMPLETED =====");
+    if (fallbackProxy && fallbackProxy.length > 0) {
+        return fallbackProxy;
+    }
     return "DIRECT";
 }`;
     }
@@ -1239,14 +1455,11 @@ function FindProxyForURL(url, host) {
             console.log('📋 Stored URLs for blocking (raw):', JSON.stringify(storedUrls));
             console.log('📋 Allowed IPs (raw):', JSON.stringify(storedIPs));
             
-            // Clear existing rules
+            // Clear existing rules (only ours: ids 1..999)
             const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-            const ruleIdsToRemove = existingRules.map(rule => rule.id);
-            
+            const ruleIdsToRemove = existingRules.filter(r=> r.id>=1 && r.id<=999).map(rule => rule.id);
             if (ruleIdsToRemove.length > 0) {
-                await chrome.declarativeNetRequest.updateDynamicRules({
-                    removeRuleIds: ruleIdsToRemove
-                });
+                await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIdsToRemove });
             }
             
             // Get current IP
@@ -1255,6 +1468,7 @@ function FindProxyForURL(url, host) {
             
             // Create rules for each URL
             const rules = [];
+            // start ids from 1.. to avoid clashing
             let ruleId = 1;
             
             // Process each URL entry
@@ -1530,6 +1744,14 @@ function FindProxyForURL(url, host) {
                         } catch (error) {
                             console.error('❌ Error in debugRules:', error);
                             sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                    case 'debugProxy':
+                        try {
+                            const snap = await this.dumpProxySnapshot();
+                            sendResponse({ success: true, snapshot: snap });
+                        } catch (e) {
+                            sendResponse({ success: false, error: e.message });
                         }
                         break;
                         
