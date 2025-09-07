@@ -115,6 +115,75 @@ class IPUtils {
         }
     }
 
+    static async getCachedCountry() {
+        try {
+            const cached = await chrome.storage.local.get(['cachedCountry', 'countryTimestamp']);
+            const now = Date.now();
+            
+            if (cached.cachedCountry && cached.countryTimestamp && 
+                (now - cached.countryTimestamp) < this.IP_CACHE_DURATION) {
+                return cached.cachedCountry;
+            }
+            
+            // Try to get country from IP
+            const ip = await this.getCachedIP();
+            const country = await this.getCountryFromIP(ip);
+            
+            if (country) {
+                await chrome.storage.local.set({
+                    cachedCountry: country,
+                    countryTimestamp: now
+                });
+            }
+            
+            return country;
+        } catch (error) {
+            console.error('Error getting cached country:', error);
+            return null;
+        }
+    }
+
+    static async getCountryFromIP(ip) {
+        const endpoints = [
+            `https://ipapi.co/${ip}/country/`,
+            `https://ipinfo.io/${ip}/country`,
+            `https://ipwho.is/${ip}`
+        ];
+        
+        for (const url of endpoints) {
+            try {
+                console.log(`🌍 Trying country endpoint: ${url}`);
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 5000);
+                const response = await fetch(url, { 
+                    signal: controller.signal,
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                clearTimeout(timeout);
+                
+                if (response.ok) {
+                    let country = '';
+                    if (url.includes('ipwho.is')) {
+                        const data = await response.json();
+                        country = data.country_code || '';
+                    } else {
+                        country = (await response.text()).trim();
+                    }
+                    
+                    if (country && country.length === 2) {
+                        console.log(`🌍 Country detected: ${country.toUpperCase()}`);
+                        return country.toUpperCase();
+                    }
+                }
+            } catch (error) {
+                console.warn(`Failed to get country from ${url}:`, error);
+            }
+        }
+        
+        console.warn('🌍 Failed to get country from all endpoints');
+        return null;
+    }
+
     /**
      * Force refresh IP (bypass cache)
      * @returns {Promise<string>} - Fresh IP address
@@ -261,22 +330,23 @@ class URLUtils {
     static domainToRegex(domain) {
         if (!domain || typeof domain !== 'string') return '';
         const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        let regex;
+        let hostPattern;
         if (domain === '*.binance.*') {
-            regex = '^https?://([^/]*\\.)?binance\\.[^/]+/';
+            hostPattern = '((?:[^/]*\\.)?binance\\.[^/]+)';
         } else if (domain.startsWith('*.') && domain.endsWith('.*')) {
             const mid = esc(domain.slice(2, -2));
-            regex = `^https?://([^/]*\\.)?${mid}\\.[^/]+/`;
+            hostPattern = `((?:[^/]*\\.)?${mid}\\.[^/]+)`;
         } else if (domain.startsWith('*.')) {
             const base = esc(domain.slice(2));
-            regex = `^https?://([^/]*\\.)?${base}/`;
+            hostPattern = `((?:[^/]*\\.)?${base})`;
         } else if (domain.endsWith('.*')) {
             const pre = esc(domain.slice(0, -2));
-            regex = `^https?://([^/]*\\.)?${pre}\\.[^/]+/`;
+            hostPattern = `((?:[^/]*\\.)?${pre}\\.[^/]+)`;
         } else {
             const exact = esc(domain);
-            regex = `^https?://([^/]*\\.)?${exact}/`;
+            hostPattern = `((?:[^/]*\\.)?${exact})`;
         }
+        const regex = `^https?://${hostPattern}(?:/|$)`;
         console.log(`🎯 DNR regex for ${domain}: ${regex}`);
         return regex;
     }
@@ -301,10 +371,35 @@ class URLUtils {
                     return matches;
                 }
                 
+                // Special handling for *.bingx.com - include all bingx subdomains and related domains
+                if (urlPattern === '*.bingx.com') {
+                    const bingxPatterns = [
+                        'bingx.com', 'www.bingx.com', 'api.bingx.com', 'trade.bingx.com',
+                        'bb-client-new.log-global.aliyuncs.com', // BingX logging domain
+                        'front-log.great-api.com', // BingX frontend logging
+                        'scripts.prdredir.com' // BingX scripts
+                    ];
+                    const matches = bingxPatterns.some(pattern => 
+                        accessHostname === pattern || 
+                        accessHostname.endsWith('.' + pattern) ||
+                        accessHostname.includes('bingx') ||
+                        accessHostname.includes('bingx.com')
+                    );
+                    console.log(`🔍 BingX pattern check: ${matches}`);
+                    return matches;
+                }
+                
                 // Convert wildcard pattern to regex
                 let regexPattern = urlPattern
                     .replace(/\./g, '\\.')  // Escape dots
                     .replace(/\*/g, '.*');   // Convert * to .*
+                
+                // Special handling for *.domain.* patterns
+                if (urlPattern.startsWith('*.') && urlPattern.endsWith('.*')) {
+                    // For *.domain.*, match both domain.com and *.domain.com
+                    const domain = urlPattern.slice(2, -2); // Remove *. and .*
+                    regexPattern = `(.*\\.)?${domain.replace(/\./g, '\\.')}(\\..*)?`;
+                }
                 
                 // If pattern doesn't start with *, add start anchor
                 if (!urlPattern.startsWith('*')) {
@@ -560,6 +655,77 @@ class BackgroundManager {
     }
 
     /**
+     * Check country rules against current IP's country
+     * @param {string} url - URL to check
+     * @param {string} userIP - Current user IP
+     * @param {string} userCountry - Current user's country code
+     * @returns {Promise<boolean>} - Whether to block
+     */
+    static async checkCountryRules(url, userIP, userCountry) {
+        try {
+            console.log(`🌍 checkCountryRules called for URL: ${url}, IP: ${userIP}, Country: ${userCountry}`);
+            
+            const storageData = await chrome.storage.local.get(['country_rules']);
+            const countryRules = storageData.country_rules || [];
+            
+            console.log(`🌍 Raw country rules from storage:`, countryRules);
+            
+            if (countryRules.length === 0) {
+                console.log('✅ No country rules, allowing');
+                return false;
+            }
+            
+            console.log(`🌍 Found ${countryRules.length} country rules`);
+            
+            for (const rule of countryRules) {
+                console.log(`🌍 Checking country rule:`, rule);
+                console.log(`🌍 Rule domain: ${rule.domain}, mode: ${rule.mode}, countries: [${rule.countries.join(', ')}]`);
+                
+                // Check if URL matches the domain pattern
+                const domainMatch = URLUtils.matchingDomainRegex(url, rule.domain);
+                console.log(`🌍 Domain match for ${rule.domain}: ${domainMatch}`);
+                
+                if (domainMatch) {
+                    console.log(`🌍 Country rule matched: ${rule.domain}`);
+                    console.log(`🌍 Rule mode: ${rule.mode}, Countries: [${rule.countries.join(', ')}]`);
+                    console.log(`🌍 User country: ${userCountry}`);
+                    
+                    const isCountryAllowed = rule.countries.includes(userCountry);
+                    console.log(`🌍 Is country allowed: ${isCountryAllowed}`);
+                    
+                    if (rule.mode === 'whitelist') {
+                        if (isCountryAllowed) {
+                            console.log('✅ Country found in whitelist, allowing');
+                            return false; // Allow
+                        } else {
+                            console.log('🚫 Country not in whitelist, blocking');
+                            return true; // Block
+                        }
+                    } else if (rule.mode === 'blacklist') {
+                        if (isCountryAllowed) {
+                            console.log('🚫 Country found in blacklist, blocking');
+                            return true; // Block
+                        } else {
+                            console.log('✅ Country not in blacklist, allowing');
+                            return false; // Allow
+                        }
+                    }
+                } else {
+                    console.log(`🌍 Domain ${rule.domain} does not match ${url}`);
+                }
+            }
+            
+            console.log('✅ No country rules matched, allowing');
+            return false;
+            
+        } catch (error) {
+            console.error('❌ Error in checkCountryRules:', error);
+            await ErrorHandler.handle(error, 'checkCountryRules');
+            return false; // Allow on error
+        }
+    }
+
+    /**
      * Update IP and rules - core update logic
      */
     static async updateIPAndRules() {
@@ -577,7 +743,9 @@ class BackgroundManager {
                 ipTimestamp: now,
                 last_ip_update: now,
                 ip_country: country,
-                ip_flag: flag
+                ip_flag: flag,
+                cachedCountry: country,
+                countryTimestamp: now
             });
             console.log(`✅ IP updated to: ${freshIP}`);
             
@@ -711,6 +879,19 @@ class BackgroundManager {
                 });
                 await this.setColor(info.tabId);
             });
+
+            // Capture URL at navigation start for accurate blocked-domain reporting
+            chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+                try {
+                    const blockedPage = chrome.runtime.getURL('html/blocked.html');
+                    const url = changeInfo.url || tab?.url || '';
+                    if (!url || !/^https?:/i.test(url)) return;
+                    if (url.startsWith(blockedPage)) return;
+                    // store immediately; used by blocked.html
+                    const host = new URL(url).hostname;
+                    await chrome.storage.local.set({ [`blockedUrl_${tabId}`]: url, last_blocked_domain: host });
+                } catch (_) {}
+            });
             
             // Set up cached rules for sync access
             await this.setupCachedRules();
@@ -733,6 +914,46 @@ class BackgroundManager {
             
             // Set up detection for blocked requests
             this.setupBlockedRequestDetection();
+            // Capture original target URL before any redirect/block occurs
+            try {
+                chrome.webNavigation.onBeforeNavigate.addListener(async (details)=>{
+                    try {
+                        if (details.frameId !== 0) return; // main_frame only
+                        const url = details.url || '';
+                        if (!/^https?:/i.test(url)) return;
+                        const should = await this.shouldBlockURL(url);
+                        if (should && details.tabId > 0) {
+                            const domain = (new URL(url)).hostname;
+                            await chrome.storage.local.set({
+                                [`blockedUrl_${details.tabId}`]: url,
+                                last_blocked_domain: domain
+                            });
+                            
+                            // Also store in session storage for immediate access
+                            await chrome.storage.session.set({
+                                [`blocked_domain_${details.tabId}`]: domain,
+                                current_blocked_domain: domain
+                            });
+                            
+                            // Store in sessionStorage for the blocked page
+                            try {
+                                await chrome.scripting.executeScript({
+                                    target: { tabId: details.tabId },
+                                    func: (domain) => {
+                                        sessionStorage.setItem('blocked_domain', domain);
+                                    },
+                                    args: [domain]
+                                });
+                            } catch (error) {
+                                console.log('❌ Error storing domain in sessionStorage:', error);
+                            }
+                        }
+                    } catch (_) {}
+                });
+                console.log('✅ webNavigation onBeforeNavigate capture enabled');
+            } catch (e) {
+                console.warn('webNavigation capture not available:', e);
+            }
             
             // Set up alarms for periodic tasks
             this.setupAlarms();
@@ -884,6 +1105,46 @@ class BackgroundManager {
     static setupBlockedRequestDetection() {
         console.log('🔧 Setting up blocked request detection...');
         this._proxyErrorCount = 0;
+        // Pre-capture main_frame navigations that will be blocked (for accurate blocked domain on custom page)
+        try {
+            chrome.webRequest.onBeforeRequest.addListener(
+                (details) => {
+                    try {
+                        const blockedPage = chrome.runtime.getURL('html/blocked.html');
+                        if (details.type !== 'main_frame') return;
+                        if (details.url.startsWith(blockedPage)) return;
+                        // Async evaluate and store intended blocked URL
+                        this.shouldBlockURL(details.url).then((shouldBlock) => {
+                            if (shouldBlock && details.tabId > 0) {
+                                const domain = (new URL(details.url)).hostname;
+                                chrome.storage.local.set({
+                                    [`blockedUrl_${details.tabId}`]: details.url,
+                                    last_blocked_domain: domain
+                                });
+                                
+                                // Also store in session storage for immediate access
+                                chrome.storage.session.set({
+                                    [`blocked_domain_${details.tabId}`]: domain,
+                                    current_blocked_domain: domain
+                                });
+                                
+                                // Store in sessionStorage for the blocked page
+                                chrome.scripting.executeScript({
+                                    target: { tabId: details.tabId },
+                                    func: (domain) => {
+                                        sessionStorage.setItem('blocked_domain', domain);
+                                    },
+                                    args: [domain]
+                                }).catch(() => {});
+                            }
+                        }).catch(()=>{});
+                    } catch (_) { /* noop */ }
+                },
+                { urls: ["<all_urls>"] }
+            );
+        } catch (e) {
+            console.warn('onBeforeRequest pre-capture not available:', e);
+        }
         chrome.webRequest.onErrorOccurred.addListener(
             async (details) => {
                 console.log('🔍 ===== WEBREQUEST ERROR DETECTED =====');
@@ -920,11 +1181,54 @@ class BackgroundManager {
                         console.log(`🎯 URL ${details.url} matches blocking rules, replacing with custom page.`);
                         try {
                             // Store the original URL so the blocked page can display it
-                            await chrome.storage.local.set({ [`blockedUrl_${details.tabId}`]: details.url });
+                            const domain = URLUtils.getHostFromURL(details.url);
+                            console.log('🔍 Blocking URL:', details.url);
+                            console.log('🔍 Extracted domain:', domain);
+                            console.log('🔍 Tab ID:', details.tabId);
+                            
+                            // Test URL parsing
+                            try {
+                                const testUrl = new URL(details.url);
+                                console.log('🔍 Test URL parsing - hostname:', testUrl.hostname);
+                            } catch (error) {
+                                console.log('❌ Error parsing URL:', error);
+                            }
+                            await chrome.storage.local.set({ 
+                                [`blockedUrl_${details.tabId}`]: details.url,
+                                last_blocked_domain: domain
+                            });
+                            
+                            // Also store in session storage for immediate access
+                            try {
+                                await chrome.storage.session.set({
+                                    [`blocked_domain_${details.tabId}`]: domain,
+                                    current_blocked_domain: domain
+                                });
+                            } catch (error) {
+                                console.log('❌ Error storing in session storage:', error);
+                            }
+                            
+                            console.log('✅ Stored domain in storage:', domain);
                             
                             // Update the tab to show our custom blocked page
+                            const blockedPageUrl = chrome.runtime.getURL(`html/blocked.html?domain=${encodeURIComponent(domain)}`);
+                            console.log('🔍 Redirecting to blocked page:', blockedPageUrl);
+                            
+                            // Store domain in sessionStorage for the blocked page
+                            try {
+                                await chrome.scripting.executeScript({
+                                    target: { tabId: details.tabId },
+                                    func: (domain) => {
+                                        sessionStorage.setItem('blocked_domain', domain);
+                                    },
+                                    args: [domain]
+                                });
+                            } catch (error) {
+                                console.log('❌ Error storing domain in sessionStorage:', error);
+                            }
+                            
                             await chrome.tabs.update(details.tabId, {
-                                url: chrome.runtime.getURL('html/blocked.html')
+                                url: blockedPageUrl
                             });
                             
                             console.log(`✅ Tab ${details.tabId} redirected to custom blocked page.`);
@@ -1000,8 +1304,33 @@ class BackgroundManager {
                 // Block immediately by redirecting to blocked page
                 try {
                     const domain = URLUtils.getHostFromURL(details.url);
+                    const blockedPageUrl = chrome.runtime.getURL(`html/blocked.html?domain=${encodeURIComponent(domain)}`);
+                    
+                    // Store domain in session storage
+                    try {
+                        await chrome.storage.session.set({
+                            [`blocked_domain_${tabId}`]: domain,
+                            current_blocked_domain: domain
+                        });
+                    } catch (error) {
+                        console.log('❌ Error storing in session storage:', error);
+                    }
+                    
+                    // Store domain in sessionStorage for the blocked page
+                    try {
+                        await chrome.scripting.executeScript({
+                            target: { tabId: tabId },
+                            func: (domain) => {
+                                sessionStorage.setItem('blocked_domain', domain);
+                            },
+                            args: [domain]
+                        });
+                    } catch (error) {
+                        console.log('❌ Error storing domain in sessionStorage:', error);
+                    }
+                    
                     await chrome.tabs.update(tabId, {
-                        url: chrome.runtime.getURL(`html/blocked.html?domain=${encodeURIComponent(domain)}`)
+                        url: blockedPageUrl
                     });
                     console.log('✅ Tab', tabId, 'redirected to blocked page');
                 } catch (redirectError) {
@@ -1105,6 +1434,47 @@ class BackgroundManager {
         try {
             console.log('🔍 Checking URL:', url);
             
+            // First, check country rules for ALL URLs
+            try {
+                const userIP = await IPUtils.getCachedIP();
+                const userCountry = await IPUtils.getCachedCountry();
+                
+                console.log('🌍 Country check - IP:', userIP, 'Country:', userCountry);
+                
+                // Force country detection if not available
+                if (ValidationUtils.isValidIP(userIP) && !userCountry) {
+                    console.log('🌍 Country not cached, trying to detect...');
+                    const detectedCountry = await IPUtils.getCountryFromIP(userIP);
+                    if (detectedCountry) {
+                        console.log('🌍 Country detected:', detectedCountry);
+                        await chrome.storage.local.set({
+                            cachedCountry: detectedCountry,
+                            countryTimestamp: Date.now()
+                        });
+                        userCountry = detectedCountry;
+                    }
+                }
+                
+                if (ValidationUtils.isValidIP(userIP) && userCountry) {
+                    console.log('🌍 Checking country rules for:', url, 'IP:', userIP, 'Country:', userCountry);
+                    const shouldBlockCountry = await this.checkCountryRules(url, userIP, userCountry);
+                    
+                    if (shouldBlockCountry) {
+                        console.log('🚫 Country rule matched, blocking');
+                        return true;
+                    } else {
+                        console.log('✅ Country rules checked, no blocking required');
+                    }
+                } else {
+                    console.log('🌍 Skipping country rules - IP or Country not available');
+                }
+            } catch (error) {
+                console.error('❌ Error in country check:', error);
+                await ErrorHandler.handle(error, 'shouldBlockURL - Country check');
+                // Don't block on country check error, just log it
+            }
+            
+            // Then check IP rules
             const storageData = await chrome.storage.local.get(['urls', 'allowed_ips']);
             const storedUrls = storageData.urls || [];
             const storedIPs = storageData.allowed_ips || [];
@@ -1188,14 +1558,18 @@ class BackgroundManager {
             console.log('🔧 Setting up cached rules...');
             
             // Get all stored URLs for caching
-            const storageData = await chrome.storage.local.get(['urls', 'allowed_ips']);
+            const storageData = await chrome.storage.local.get(['urls', 'allowed_ips', 'country_rules']);
             const storedUrls = storageData.urls || [];
             const storedIPs = storageData.allowed_ips || [];
+            const countryRules = storageData.country_rules || [];
             const currentIP = await IPUtils.getCachedIP();
+            const currentCountry = await IPUtils.getCachedCountry();
             
             console.log('📋 Stored URLs:', storedUrls);
             console.log('📋 Stored IPs:', storedIPs);
+            console.log('📋 Country Rules:', countryRules);
             console.log('📋 Current IP:', currentIP);
+            console.log('📋 Current Country:', currentCountry);
             
             // Cache rules for sync access
             this._cachedRules = [];
@@ -1248,9 +1622,54 @@ class BackgroundManager {
                 }
             }
             
+            // Process country rules
+            console.log(`🌍 Processing ${countryRules.length} country rules...`);
+            console.log(`🌍 Current country: ${currentCountry}`);
+            
+            for (const rule of countryRules) {
+                console.log(`🌍 Processing country rule: ${rule.domain} (${rule.mode})`);
+                console.log(`🌍 Rule countries: [${rule.countries.join(', ')}]`);
+                
+                const isCountryAllowed = rule.countries.includes(currentCountry);
+                let shouldBlockCountry = false;
+                
+                if (rule.mode === 'whitelist') {
+                    shouldBlockCountry = !isCountryAllowed;
+                } else if (rule.mode === 'blacklist') {
+                    shouldBlockCountry = isCountryAllowed;
+                }
+                
+                console.log(`🌍 Country rule result: ${rule.domain} -> ${shouldBlockCountry ? 'BLOCK' : 'ALLOW'} (Country: ${currentCountry}, Mode: ${rule.mode})`);
+                
+                if (shouldBlockCountry) {
+                    // Add domain to blocked list
+                    if (rule.domain.includes('*')) {
+                        // Special handling for *.bingx.com to include all related domains for PAC blocking
+                        if (rule.domain === '*.bingx.com') {
+                            const bingxRelatedDomains = [
+                                'bingx.com', 'www.bingx.com', 'api.bingx.com', 'trade.bingx.com',
+                                'bb-client-new.log-global.aliyuncs.com', // BingX logging domain
+                                'front-log.great-api.com', // BingX frontend logging
+                                'scripts.prdredir.com' // BingX scripts
+                            ];
+                            bingxRelatedDomains.forEach(d => this._blockedDomains.add(d));
+                            console.log(`🚫 Added country-blocked BingX related domains: ${bingxRelatedDomains.join(', ')}`);
+                        } else {
+                            const baseDomain = rule.domain.replace(/^\*\./, '').replace(/\.\*$/, '');
+                            this._blockedDomains.add(baseDomain);
+                            this._blockedDomains.add(`www.${baseDomain}`);
+                            console.log(`🚫 Added country-blocked wildcard domain: ${baseDomain}`);
+                        }
+                    } else {
+                        this._blockedDomains.add(rule.domain);
+                        console.log(`🚫 Added country-blocked domain: ${rule.domain}`);
+                    }
+                }
+            }
+            
             console.log('📋 Cached rules for sync access:', this._cachedRules);
             console.log('🚫 Blocked domains:', Array.from(this._blockedDomains));
-            console.log(`✅ setupCachedRules completed: ${this._cachedRules.length} rules cached, ${this._blockedDomains.size} domains blocked`);
+            console.log(`✅ setupCachedRules completed: ${this._cachedRules.length} IP rules cached, ${countryRules.length} country rules processed, ${this._blockedDomains.size} domains blocked`);
         } catch (error) {
             console.error('❌ Error setting up cached rules:', error);
         }
@@ -1357,6 +1776,16 @@ function FindProxyForURL(url, host) {
         console.log("PAC: ALLOWING blocked page:", url);
         return "DIRECT";
     }
+
+    // 0) Country/IP pre-block: if host is in blockedDomains (from cached IP/country rules), sinkhole immediately
+    //    This ensures country-based blocks are applied before any content loads
+    for (var bi = 0; bi < blockedDomains.length; bi++) {
+        var bd = blockedDomains[bi];
+        if (host === bd || host.endsWith('.' + bd)) {
+            console.log("PAC: PRE-BLOCK via blockedDomains:", host, "matched:", bd);
+            return "PROXY 127.0.0.1:1";
+        }
+    }
     
     // Check if current IP is in whitelist for this domain
     console.log("PAC: Checking", whitelistData.length, "whitelist entries");
@@ -1448,9 +1877,10 @@ function FindProxyForURL(url, host) {
             console.log('🔧 Setting up declarativeNetRequest...');
             
             // Get all stored URLs for blocking
-            const storageData = await chrome.storage.local.get(['urls', 'allowed_ips']);
+            const storageData = await chrome.storage.local.get(['urls', 'allowed_ips', 'country_rules']);
             const storedUrls = storageData.urls || [];
             const storedIPs = storageData.allowed_ips || [];
+            const countryRules = storageData.country_rules || [];
             
             console.log('📋 Stored URLs for blocking (raw):', JSON.stringify(storedUrls));
             console.log('📋 Allowed IPs (raw):', JSON.stringify(storedIPs));
@@ -1462,9 +1892,11 @@ function FindProxyForURL(url, host) {
                 await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIdsToRemove });
             }
             
-            // Get current IP
+            // Get current IP and country
             const currentIP = await IPUtils.getCachedIP();
+            const currentCountry = await IPUtils.getCachedCountry();
             console.log('🌐 Current IP for rules:', currentIP);
+            console.log('🌍 Current Country for rules:', currentCountry);
             
             // Create rules for each URL
             const rules = [];
@@ -1488,13 +1920,14 @@ function FindProxyForURL(url, host) {
                     console.log(`   Should block: ${shouldBlock}`);
                     
                     if (shouldBlock) {
-                        // Create blocking rule
+                        // Create redirect rule to custom blocked page (so user always sees our page)
                         const regexFilter = URLUtils.domainToRegex(domain);
                         const rule = {
                             id: ruleId++,
                             priority: 1,
                             action: {
-                                type: 'block'
+                                type: 'redirect',
+                                redirect: { extensionPath: '/html/blocked.html' }
                             },
                             condition: {
                                 regexFilter: regexFilter,
@@ -1513,6 +1946,57 @@ function FindProxyForURL(url, host) {
                 }
             }
             
+            // Also add country-based blocking rules for immediate main-frame blocking
+            if (countryRules && countryRules.length > 0 && currentCountry) {
+                console.log(`🌍 Processing ${countryRules.length} country rules for DNR...`);
+                for (const rule of countryRules) {
+                    try {
+                        const isCountryAllowed = (rule.countries || []).includes(currentCountry);
+                        let shouldBlockCountry = false;
+                        if (rule.mode === 'whitelist') {
+                            shouldBlockCountry = !isCountryAllowed;
+                        } else if (rule.mode === 'blacklist') {
+                            shouldBlockCountry = isCountryAllowed;
+                        }
+                        if (shouldBlockCountry) {
+                            // Base rule for the configured domain pattern
+                            const regexFilter = URLUtils.domainToRegex(rule.domain);
+                            rules.push({
+                                id: ruleId++,
+                                priority: 2,
+                                action: { type: 'redirect', redirect: { extensionPath: '/html/blocked.html' } },
+                                condition: { regexFilter, resourceTypes: ['main_frame'] }
+                            });
+                            console.log(`🚫 Added COUNTRY BLOCK rule for ${rule.domain} (mode: ${rule.mode}) -> ${regexFilter}`);
+
+                            // Special handling for *.bingx.com: include related domains that BingX uses
+                            if (rule.domain === '*.bingx.com') {
+                                const bingxRelatedDomains = [
+                                    'bingx.com', 'www.bingx.com', 'api.bingx.com', 'trade.bingx.com',
+                                    'bb-client-new.log-global.aliyuncs.com',
+                                    'front-log.great-api.com',
+                                    'scripts.prdredir.com'
+                                ];
+                                for (const d of bingxRelatedDomains) {
+                                    const r = URLUtils.domainToRegex(d);
+                                    rules.push({
+                                        id: ruleId++,
+                                        priority: 2,
+                                        action: { type: 'redirect', redirect: { extensionPath: '/html/blocked.html' } },
+                                        condition: { regexFilter: r, resourceTypes: ['main_frame'] }
+                                    });
+                                    console.log(`🚫 Added COUNTRY BLOCK (bingx related) for ${d} -> ${r}`);
+                                }
+                            }
+                        } else {
+                            console.log(`✅ Country ALLOW for ${rule.domain} (mode: ${rule.mode})`);
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ Error processing country DNR rule:', e);
+                    }
+                }
+            }
+
             // Add rules
             if (rules.length > 0) {
                 await chrome.declarativeNetRequest.updateDynamicRules({
@@ -1714,6 +2198,29 @@ function FindProxyForURL(url, host) {
                             sendResponse({ success: true, ip: ip });
                         } catch (error) {
                             await ErrorHandler.handle(error, 'getCurrentIP');
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'debugCountryRules':
+                        try {
+                            const countryRules = await chrome.storage.local.get(['country_rules']);
+                            const userIP = await IPUtils.getCachedIP();
+                            const userCountry = await IPUtils.getCachedCountry();
+                            
+                            console.log('🔍 Debug Country Rules:');
+                            console.log('Country Rules:', countryRules.country_rules);
+                            console.log('User IP:', userIP);
+                            console.log('User Country:', userCountry);
+                            
+                            sendResponse({ 
+                                success: true, 
+                                countryRules: countryRules.country_rules,
+                                userIP: userIP,
+                                userCountry: userCountry
+                            });
+                        } catch (error) {
+                            await ErrorHandler.handle(error, 'debugCountryRules');
                             sendResponse({ success: false, error: error.message });
                         }
                         break;

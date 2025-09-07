@@ -96,15 +96,31 @@
     if (!savedListEl) return;
     const existing = await chrome.storage.local.get(['country_rules']);
     const rules = existing.country_rules || [];
+    
+    console.log('Refreshing saved rules:', rules);
+    
     savedListEl.innerHTML = '';
     rules.forEach((r, idx)=>{
       const row = document.createElement('div');
-      row.style.display='flex'; row.style.alignItems='center'; row.style.gap='8px';
-      const countriesLabel = (r.countries||[]).join(', ');
-      row.innerHTML = `<span style="min-width:120px; font-weight:600;">${r.domain}</span>
-                       <span style="color:#6c757d;">${r.mode}</span>
-                       <span style="flex:1; color:#6c757d;">${countriesLabel}</span>
-                       <a href="#" data-domain="${r.domain}" class="delete">Delete</a>`;
+      row.style.display='grid';
+      row.style.gridTemplateColumns='1fr 110px auto 80px';
+      row.style.alignItems='center';
+      row.style.columnGap='8px';
+      const countriesHtml = (r.countries||[]).map(code=>{
+        const entry = countries.find(c=> c.code === code);
+        const flag = entry ? entry.flag : '';
+        return `<span class=\"cr-country-pill\" style=\"display:inline-flex; align-items:center; gap:6px; padding:2px 6px; border-radius:12px; background:#f8f9fa; border:1px solid #e9ecef;\">\n                  <span class=\"cr-flag\" style=\"font-size:22px; line-height:1; display:inline-block; width:22px; text-align:center;\">${flag}</span>
+                  <span class="cr-code" style="font-weight:600; color:#495057;">${code}</span>
+                </span>`;
+      }).join(' ');
+      const modeLabel = r.mode === 'whitelist' ? 'Whitelist' : 'Blacklist';
+      
+      console.log('Rendering rule:', { domain: r.domain, mode: r.mode, modeLabel, countries: r.countries });
+      
+      row.innerHTML = `<span style="font-weight:600;">${r.domain}</span>
+                       <span style=\"color:#6c757d;\">${modeLabel}</span>
+                       <span style=\"display:flex; flex-wrap:wrap; gap:8px; align-items:center;\">${countriesHtml}</span>
+                       <a href="#" data-domain="${r.domain}" class="delete" style="justify-self:end;">Delete</a>`;
       row.querySelector('.delete').onclick = async (e)=>{
         e.preventDefault();
         const dom = e.target.getAttribute('data-domain');
@@ -112,6 +128,14 @@
         const newRules = (ex.country_rules||[]).filter(rr=> rr.domain !== dom);
         await chrome.storage.local.set({ country_rules: newRules });
         refreshSaved();
+        
+        // Notify background to re-evaluate rules
+        try {
+            await chrome.runtime.sendMessage({type: "update"});
+            await chrome.runtime.sendMessage({type: "refreshIP"});
+        } catch (error) {
+            console.warn('Failed to notify background:', error);
+        }
       };
       savedListEl.appendChild(row);
     });
@@ -120,18 +144,49 @@
   const saveAll = document.getElementById('cr_save_all');
   if (saveAll) saveAll.onclick = async (e)=>{
     e.preventDefault();
-    const domain = (document.getElementById('cr_domain_input')?.value || '').trim();
-    if (!domain) { if (statusEl) statusEl.textContent = 'Please enter a domain'; return; }
+    const raw = (document.getElementById('cr_domain_input')?.value || '').trim();
+    if (!raw) { if (statusEl) statusEl.textContent = 'Please enter a domain'; return; }
     const mode = (document.querySelector('input[name="cr_mode"]:checked')?.value) || 'whitelist';
     const countriesArr = Array.from(selectedCodes);
+    
+    // Support multiple comma-separated domains
+    const parts = raw.split(',').map(s=> (s||'').trim()).filter(Boolean);
+    console.log('Saving country rules (batch):', { input: raw, parts, mode, countries: countriesArr });
+    
     const existing = await chrome.storage.local.get(['country_rules']);
     const rules = existing.country_rules || [];
-    const idx = rules.findIndex(r=> r.domain === domain);
-    const newRule = { domain, mode, countries: countriesArr };
-    if (idx>=0) rules[idx] = newRule; else rules.push(newRule);
+    const invalids = [];
+    
+    for (const domain of parts) {
+      try {
+        if (!ValidationUtils.isValidDomain(domain)) {
+          invalids.push(domain);
+          continue;
+        }
+        const idx = rules.findIndex(r=> r.domain === domain);
+        const newRule = { domain, mode, countries: countriesArr };
+        if (idx>=0) rules[idx] = newRule; else rules.push(newRule);
+        console.log('Added/Updated rule:', newRule);
+      } catch (err) {
+        console.warn('Failed to process domain:', domain, err);
+        invalids.push(domain);
+      }
+    }
+    
     await chrome.storage.local.set({ country_rules: rules });
-    if (statusEl) { statusEl.textContent = 'Saved'; setTimeout(()=> statusEl.textContent='', 1500); }
+    if (statusEl) {
+      statusEl.textContent = invalids.length ? `Saved (${parts.length - invalids.length} ok, ${invalids.length} invalid)` : 'Saved';
+      setTimeout(()=> statusEl.textContent='', 2000);
+    }
     await refreshSaved();
+    
+    // Notify background to re-evaluate rules
+    try {
+        await chrome.runtime.sendMessage({type: "update"});
+        await chrome.runtime.sendMessage({type: "refreshIP"});
+    } catch (error) {
+        console.warn('Failed to notify background:', error);
+    }
   };
 
   refreshSaved();

@@ -11,6 +11,8 @@ class SettingsManager {
     static async updateBackground() {
         try {
             await chrome.runtime.sendMessage({type: "update"});
+            // Also trigger rule re-evaluation for country rules
+            await chrome.runtime.sendMessage({type: "refreshIP"});
         } catch (error) {
             await ErrorHandler.handle(error, 'updateBackground');
         }

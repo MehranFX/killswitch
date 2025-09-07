@@ -34,7 +34,12 @@
 	},
 	"web_accessible_resources": [
 		{
-			"resources": ["src/options/options.html"],
+			"resources": [
+				"html/blocked.html",
+				"js/blocked.js",
+				"img/icon-48x48-red.png",
+				"img/icon-128x128-red.png"
+			],
 			"matches": ["<all_urls>"]
 		}
 	],

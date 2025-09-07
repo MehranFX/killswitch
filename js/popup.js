@@ -629,6 +629,8 @@ class PopupManager {
             });
         }
 
+        
+
         // No extra debug/control buttons
 
     }
