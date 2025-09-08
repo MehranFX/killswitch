@@ -21,11 +21,12 @@
       <div class="rule-item" style="text-align:left;">
         <p>
           <strong>WebRTC Leak Protection</strong><br>
-          <label style="display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" id="webrtc_protect" />
-            <span>Prevent WebRTC IP leakage (replace/enforce mDNS)</span>
-          </label>
-          <small>When enabled, the extension will try to minimize local IP exposure via WebRTC.</small>
+          <select id="webrtc_policy" style="width:100%; margin-top:8px;">
+            <option value="default_public_interface_only">Use the default public interface only (Recommended for VPN users)</option>
+            <option value="default_public_and_private_interfaces">Use both public and private interfaces</option>
+            <option value="disable_non_proxied_udp">Disable non-proxied UDP (Force proxy - for browser VPN extensions)</option>
+          </select>
+          <small>Control how WebRTC traffic is routed to prevent IP address leaks. Default setting works for most VPN users.</small>
         </p>
       </div>
       <div align="center">

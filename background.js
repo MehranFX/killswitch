@@ -856,11 +856,35 @@ class BackgroundManager {
     }
 
     /**
+     * Initialize WebRTC settings
+     */
+    static async initializeWebRTC() {
+        try {
+            // Get stored WebRTC policy or use default
+            const data = await chrome.storage.local.get(['webrtc_policy']);
+            const policy = data.webrtc_policy || 'default_public_interface_only';
+            
+            // Apply WebRTC policy
+            if (chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy) {
+                await chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: policy });
+                console.log('🔒 WebRTC policy set to:', policy);
+            } else {
+                console.log('⚠️ WebRTC privacy API not available');
+            }
+        } catch (error) {
+            console.error('❌ Error initializing WebRTC:', error);
+        }
+    }
+
+    /**
      * Initialize background script
      */
     static async initialize() {
         try {
             console.log('🚀 Kill Switch Initializing...');
+            
+            // Initialize WebRTC settings
+            await this.initializeWebRTC();
             
             // First, get IP and set up rules
             await this.updateIPAndRules();
@@ -2353,6 +2377,22 @@ function FindProxyForURL(url, host) {
                             sendResponse({ success: true });
                         } catch (error) {
                             console.error('❌ Error force clearing proxy:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'updateWebRTCPolicy':
+                        try {
+                            const { policy } = request;
+                            if (chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy) {
+                                await chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: policy });
+                                console.log('🔒 WebRTC policy updated to:', policy);
+                                sendResponse({ success: true });
+                            } else {
+                                sendResponse({ success: false, error: 'WebRTC privacy API not available' });
+                            }
+                        } catch (error) {
+                            console.error('❌ Error updating WebRTC policy:', error);
                             sendResponse({ success: false, error: error.message });
                         }
                         break;

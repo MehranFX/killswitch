@@ -23,7 +23,8 @@
 	   "webRequest",
 	   "webNavigation",
 	   "proxy",
-	   "alarms"
+	   "alarms",
+	   "privacy"
 	],
 	"host_permissions": [
 		"<all_urls>"
