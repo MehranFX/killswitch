@@ -2,7 +2,7 @@
 
 (function(){
   async function loadSettings(){
-    const data = await chrome.storage.local.get(['fallback_proxy','webrtc_policy','location_config','timezone','locale','latitude','longitude']);
+    const data = await chrome.storage.local.get(['fallback_proxy','webrtc_policy','location_config','timezone','locale','latitude','longitude','privacy_protection']);
     const input = document.getElementById('fallback_proxy');
     if(input){ input.value = data.fallback_proxy || '' }
     const webrtc = document.getElementById('webrtc_policy');
@@ -22,6 +22,10 @@
     if(latitude){ latitude.value = data.latitude || '' }
     const longitude = document.getElementById('longitude');
     if(longitude){ longitude.value = data.longitude || '' }
+    
+    // Privacy protection setting
+    const privacyProtection = document.getElementById('privacy_protection');
+    if(privacyProtection){ privacyProtection.checked = !!data.privacy_protection }
   }
 
   function toggleCustomFields(config) {
@@ -125,6 +129,10 @@
       }
     }
     
+    // Privacy protection setting
+    const privacyProtection = document.getElementById('privacy_protection');
+    const protectionEnabled = privacyProtection ? privacyProtection.checked : false;
+    
     await chrome.storage.local.set({ 
       fallback_proxy: value, 
       webrtc_policy: policy,
@@ -132,7 +140,8 @@
       timezone: timezone,
       locale: locale,
       latitude: latitude,
-      longitude: longitude
+      longitude: longitude,
+      privacy_protection: protectionEnabled
     });
     
     // Apply WebRTC policy immediately via background script
