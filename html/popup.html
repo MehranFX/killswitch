@@ -38,6 +38,21 @@
             <span id="current_ip" class="ip" style="font-family: 'Courier New', monospace; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">Loading...</span>
             <img id="refresh_icon" src="../img/refresh.png" alt="refresh" class="ip-refresh-icon" title="Refresh IP" />
         </div>
+        
+        <div id="location_info" style="margin: 8px 0; padding: 8px; background: #e8f4fd; border-radius: 5px; font-size: 12px; border-left: 3px solid #3498db;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span><strong>Location:</strong></span>
+                <span id="location_text">Loading...</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span><strong>Timezone:</strong></span>
+                <span id="timezone_text">Loading...</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span><strong>Locale:</strong></span>
+                <span id="locale_text">Loading...</span>
+            </div>
+        </div>
         <div id="ip_status" style="margin: 10px 0; padding: 8px; background: #f0f0f0; border-radius: 5px; font-size: 12px;">
             <div>Next update in: <span id="countdown">--:--</span></div>
             <div>Status: <span id="ip_status_text">Loading...</span></div>

@@ -4,7 +4,7 @@
 }
 
 body{
-	overflow: hidden;
+	overflow: auto;
 	margin: 0;
 	padding: 20px;
 	font-size: 15px;
@@ -12,8 +12,8 @@ body{
 }
 
 #content{
-	overflow-y: scroll;
-	max-height: 400px;
+	overflow-y: auto;
+	max-height: 600px;
 	font-size: 15px;
 }
 
@@ -28,7 +28,7 @@ body{
 	text-decoration: underline;
 }
 
-textarea, .domain_regex{
+textarea, .domain_regex, input[type="text"], input[type="number"], select{
 	font-family: Arial, Helvetica, sans-serif;
 	font-size: 14px;
 	width: 100%;
@@ -39,7 +39,7 @@ textarea, .domain_regex{
 	transition: border-color 0.3s ease;
 }
 
-textarea:focus, .domain_regex:focus {
+textarea:focus, .domain_regex:focus, input:focus, select:focus {
 	outline: none;
 	border-color: #3498db;
 	box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
@@ -145,7 +145,7 @@ a:hover{
 }
 
 /* Button styles */
-#add, #save {
+#add, #save, #save_settings {
 	background-color: #28a745;
 	color: white;
 	border: none;
@@ -156,7 +156,7 @@ a:hover{
 	transition: all 0.3s ease;
 }
 
-#add:hover, #save:hover {
+#add:hover, #save:hover, #save_settings:hover {
 	background-color: #218838;
 	transform: translateY(-2px);
 	box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);

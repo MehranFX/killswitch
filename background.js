@@ -747,6 +747,52 @@ class BackgroundManager {
                 cachedCountry: country,
                 countryTimestamp: now
             });
+            
+            // Update location spoofing if set to match IP
+            const locationData = await chrome.storage.local.get(['location_config']);
+            if (locationData.location_config === 'matchIP') {
+                console.log('🌍 IP changed, updating location spoofing...');
+                const ipLocation = await this.fetchIPLocation();
+                if (ipLocation) {
+                    await chrome.storage.local.set({
+                        timezone: ipLocation.timezone,
+                        locale: ipLocation.locale,
+                        latitude: ipLocation.latitude,
+                        longitude: ipLocation.longitude
+                    });
+                    
+                    // Apply to all existing tabs
+                    await this.applyLocationSpoofing(
+                        ipLocation.timezone, 
+                        ipLocation.locale, 
+                        ipLocation.latitude, 
+                        ipLocation.longitude
+                    );
+                    console.log('🌍 Location spoofing updated for new IP:', ipLocation);
+                    
+                    // Notify popup to update display
+                    try {
+                        const tabs = await chrome.tabs.query({});
+                        for (const tab of tabs) {
+                            if (tab.url && tab.url.includes('chrome-extension://')) {
+                                try {
+                                    await chrome.tabs.sendMessage(tab.id, {
+                                        type: 'locationUpdated',
+                                        timezone: ipLocation.timezone,
+                                        locale: ipLocation.locale,
+                                        latitude: ipLocation.latitude,
+                                        longitude: ipLocation.longitude
+                                    });
+                                } catch (e) {
+                                    // Ignore errors for tabs that don't have the message listener
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.log('⚠️ Could not notify popup:', e.message);
+                    }
+                }
+            }
             console.log(`✅ IP updated to: ${freshIP}`);
             
             // Verify IP was stored
@@ -877,6 +923,171 @@ class BackgroundManager {
     }
 
     /**
+     * Initialize location spoofing settings
+     */
+    static async initializeLocationSpoofing() {
+        try {
+            const data = await chrome.storage.local.get(['location_config', 'timezone', 'locale', 'latitude', 'longitude']);
+            const config = data.location_config || 'matchIP';
+            
+            if (config !== 'browserDefault') {
+                let timezone = data.timezone || '';
+                let locale = data.locale || '';
+                let latitude = data.latitude || '';
+                let longitude = data.longitude || '';
+                
+                // If matchIP, fetch current IP location
+                if (config === 'matchIP') {
+                    const ipLocation = await this.fetchIPLocation();
+                    if (ipLocation) {
+                        timezone = ipLocation.timezone;
+                        locale = ipLocation.locale;
+                        latitude = ipLocation.latitude;
+                        longitude = ipLocation.longitude;
+                    }
+                }
+                
+                // Apply location spoofing to all tabs
+                await this.applyLocationSpoofing(timezone, locale, latitude, longitude);
+                console.log('🌍 Location spoofing initialized:', { timezone, locale, latitude, longitude });
+            }
+        } catch (error) {
+            console.error('❌ Error initializing location spoofing:', error);
+        }
+    }
+
+    /**
+     * Fetch IP location data
+     */
+    static async fetchIPLocation() {
+        try {
+            const response = await fetch('http://ip-api.com/json?fields=status,message,countryCode,lat,lon,timezone,query');
+            const data = await response.json();
+            if (data.status === 'success') {
+                return {
+                    timezone: data.timezone,
+                    locale: this.getLocaleFromCountryCode(data.countryCode),
+                    latitude: data.lat,
+                    longitude: data.lon
+                };
+            }
+        } catch (error) {
+            console.error('❌ Error fetching IP location:', error);
+        }
+        return null;
+    }
+
+    /**
+     * Get locale from country code
+     */
+    static getLocaleFromCountryCode(countryCode) {
+        const localeMap = {
+            'US': 'en-US', 'GB': 'en-GB', 'CA': 'en-CA', 'AU': 'en-AU',
+            'DE': 'de-DE', 'FR': 'fr-FR', 'ES': 'es-ES', 'IT': 'it-IT',
+            'JP': 'ja-JP', 'KR': 'ko-KR', 'CN': 'zh-CN', 'RU': 'ru-RU',
+            'BR': 'pt-BR', 'MX': 'es-MX', 'IN': 'hi-IN', 'AR': 'es-AR',
+            'IR': 'fa-IR', 'TR': 'tr-TR', 'SA': 'ar-SA', 'AE': 'ar-AE',
+            'EG': 'ar-EG', 'TH': 'th-TH', 'ID': 'id-ID', 'VN': 'vi-VN',
+            'PH': 'en-PH', 'MY': 'ms-MY', 'SG': 'en-SG', 'HK': 'zh-HK',
+            'TW': 'zh-TW', 'NL': 'nl-NL', 'BE': 'nl-BE', 'CH': 'de-CH',
+            'AT': 'de-AT', 'SE': 'sv-SE', 'NO': 'no-NO', 'DK': 'da-DK',
+            'FI': 'fi-FI', 'PL': 'pl-PL', 'CZ': 'cs-CZ', 'HU': 'hu-HU',
+            'RO': 'ro-RO', 'BG': 'bg-BG', 'HR': 'hr-HR', 'SK': 'sk-SK',
+            'SI': 'sl-SI', 'LT': 'lt-LT', 'LV': 'lv-LV', 'EE': 'et-ET',
+            'UA': 'uk-UA', 'BY': 'be-BY', 'KZ': 'kk-KZ', 'UZ': 'uz-UZ',
+            'AZ': 'az-AZ', 'GE': 'ka-GE', 'AM': 'hy-AM', 'KG': 'ky-KG',
+            'TJ': 'tg-TJ', 'TM': 'tk-TM', 'MN': 'mn-MN', 'NP': 'ne-NP',
+            'BD': 'bn-BD', 'LK': 'si-LK', 'MV': 'dv-MV', 'BT': 'dz-BT',
+            'MM': 'my-MM', 'KH': 'km-KH', 'LA': 'lo-LA', 'BN': 'ms-BN',
+            'TL': 'pt-TL', 'PG': 'en-PG', 'FJ': 'en-FJ', 'NC': 'fr-NC',
+            'VU': 'en-VU', 'SB': 'en-SB', 'KI': 'en-KI', 'TV': 'en-TV',
+            'WS': 'en-WS', 'TO': 'en-TO', 'NR': 'en-NR', 'PW': 'en-PW',
+            'FM': 'en-FM', 'MH': 'en-MH', 'CK': 'en-CK', 'NU': 'en-NU',
+            'TK': 'en-TK', 'WF': 'fr-WF', 'PF': 'fr-PF', 'NC': 'fr-NC',
+            'RE': 'fr-RE', 'YT': 'fr-YT', 'GP': 'fr-GP', 'MQ': 'fr-MQ',
+            'BL': 'fr-BL', 'MF': 'fr-MF', 'PM': 'fr-PM', 'GF': 'fr-GF',
+            'SR': 'nl-SR', 'CW': 'nl-CW', 'AW': 'nl-AW', 'BQ': 'nl-BQ',
+            'SX': 'nl-SX', 'AN': 'nl-AN', 'AI': 'en-AI', 'AG': 'en-AG',
+            'BS': 'en-BS', 'BB': 'en-BB', 'BZ': 'en-BZ', 'DM': 'en-DM',
+            'GD': 'en-GD', 'GY': 'en-GY', 'JM': 'en-JM', 'KN': 'en-KN',
+            'LC': 'en-LC', 'VC': 'en-VC', 'TT': 'en-TT', 'UY': 'es-UY',
+            'PY': 'es-PY', 'BO': 'es-BO', 'CL': 'es-CL', 'CO': 'es-CO',
+            'EC': 'es-EC', 'PE': 'es-PE', 'VE': 'es-VE', 'GY': 'en-GY',
+            'SR': 'nl-SR', 'GF': 'fr-GF', 'FK': 'en-FK', 'GS': 'en-GS',
+            'SH': 'en-SH', 'AC': 'en-AC', 'TA': 'en-TA', 'BV': 'en-BV',
+            'HM': 'en-HM', 'IO': 'en-IO', 'CX': 'en-CX', 'CC': 'en-CC',
+            'NF': 'en-NF', 'PN': 'en-PN', 'TC': 'en-TC', 'VG': 'en-VG',
+            'VI': 'en-VI', 'PR': 'es-PR', 'AS': 'en-AS', 'GU': 'en-GU',
+            'MP': 'en-MP', 'VI': 'en-VI', 'PR': 'es-PR', 'AS': 'en-AS',
+            'GU': 'en-GU', 'MP': 'en-MP', 'VI': 'en-VI', 'PR': 'es-PR'
+        };
+        return localeMap[countryCode] || 'en-US';
+    }
+
+    /**
+     * Apply location spoofing to all tabs
+     */
+    static async applyLocationSpoofing(timezone, locale, latitude, longitude) {
+        try {
+            const tabs = await chrome.tabs.query({});
+            for (const tab of tabs) {
+                if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+                    await this.attachDebugger(tab.id, timezone, locale, latitude, longitude);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error applying location spoofing:', error);
+        }
+    }
+
+    /**
+     * Attach debugger to tab for location spoofing
+     */
+    static async attachDebugger(tabId, timezone, locale, latitude, longitude) {
+        try {
+            if (!timezone && !locale && !latitude && !longitude) return;
+            
+            await chrome.debugger.attach({ tabId: tabId }, '1.3');
+            
+            if (timezone) {
+                await chrome.debugger.sendCommand(
+                    { tabId: tabId },
+                    'Emulation.setTimezoneOverride',
+                    { timezoneId: timezone }
+                );
+            }
+            
+            if (latitude && longitude) {
+                await chrome.debugger.sendCommand(
+                    { tabId: tabId },
+                    'Emulation.setGeolocationOverride',
+                    {
+                        latitude: parseFloat(latitude),
+                        longitude: parseFloat(longitude),
+                        accuracy: 1,
+                    }
+                );
+            }
+            
+            if (locale) {
+                await chrome.debugger.sendCommand(
+                    { tabId: tabId },
+                    'Emulation.setLocaleOverride',
+                    { locale: locale }
+                );
+            }
+            
+            console.log('🌍 Location spoofing applied to tab:', tabId);
+        } catch (error) {
+            if (error.message && error.message.includes('Another debugger is already attached')) {
+                // Tab already has debugger attached, ignore
+                return;
+            }
+            console.error('❌ Error attaching debugger to tab:', tabId, error);
+        }
+    }
+
+    /**
      * Initialize background script
      */
     static async initialize() {
@@ -885,6 +1096,9 @@ class BackgroundManager {
             
             // Initialize WebRTC settings
             await this.initializeWebRTC();
+            
+            // Initialize location spoofing
+            await this.initializeLocationSpoofing();
             
             // First, get IP and set up rules
             await this.updateIPAndRules();
@@ -902,6 +1116,45 @@ class BackgroundManager {
                     current_tab_id: info.tabId
                 });
                 await this.setColor(info.tabId);
+            });
+            
+            // Set up navigation listener for location spoofing
+            chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+                try {
+                    const data = await chrome.storage.local.get(['location_config', 'timezone', 'locale', 'latitude', 'longitude']);
+                    const config = data.location_config || 'matchIP';
+                    
+                    if (config !== 'browserDefault') {
+                        let timezone = data.timezone || '';
+                        let locale = data.locale || '';
+                        let latitude = data.latitude || '';
+                        let longitude = data.longitude || '';
+                        
+                        // If matchIP, fetch current IP location
+                        if (config === 'matchIP') {
+                            const ipLocation = await this.fetchIPLocation();
+                            if (ipLocation) {
+                                timezone = ipLocation.timezone;
+                                locale = ipLocation.locale;
+                                latitude = ipLocation.latitude;
+                                longitude = ipLocation.longitude;
+                                
+                                // Update stored values with new IP location
+                                await chrome.storage.local.set({
+                                    timezone: timezone,
+                                    locale: locale,
+                                    latitude: latitude,
+                                    longitude: longitude
+                                });
+                            }
+                        }
+                        
+                        // Apply to new tab
+                        await this.attachDebugger(details.tabId, timezone, locale, latitude, longitude);
+                    }
+                } catch (error) {
+                    console.error('❌ Error in navigation listener:', error);
+                }
             });
 
             // Capture URL at navigation start for accurate blocked-domain reporting
@@ -2393,6 +2646,34 @@ function FindProxyForURL(url, host) {
                             }
                         } catch (error) {
                             console.error('❌ Error updating WebRTC policy:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'updateLocationSpoofing':
+                        try {
+                            const { config, timezone, locale, latitude, longitude } = request;
+                            
+                            if (config === 'browserDefault') {
+                                // Detach all debuggers
+                                const tabs = await chrome.tabs.query({});
+                                for (const tab of tabs) {
+                                    try {
+                                        await chrome.debugger.detach({ tabId: tab.id });
+                                    } catch (e) {
+                                        // Ignore if not attached
+                                    }
+                                }
+                                console.log('🌍 Location spoofing disabled');
+                            } else {
+                                // Apply location spoofing
+                                await this.applyLocationSpoofing(timezone, locale, latitude, longitude);
+                                console.log('🌍 Location spoofing updated:', { timezone, locale, latitude, longitude });
+                            }
+                            
+                            sendResponse({ success: true });
+                        } catch (error) {
+                            console.error('❌ Error updating location spoofing:', error);
                             sendResponse({ success: false, error: error.message });
                         }
                         break;

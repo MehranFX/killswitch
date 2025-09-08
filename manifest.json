@@ -24,10 +24,19 @@
 	   "webNavigation",
 	   "proxy",
 	   "alarms",
-	   "privacy"
+	   "privacy",
+	   "debugger"
 	],
 	"host_permissions": [
 		"<all_urls>"
+	],
+	"content_scripts": [
+		{
+			"matches": ["<all_urls>"],
+			"js": ["js/timezone_protection.js"],
+			"run_at": "document_start",
+			"all_frames": true
+		}
 	],
 	"options_ui": {
 		"page": "/html/options.html",

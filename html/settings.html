@@ -29,6 +29,43 @@
           <small>Control how WebRTC traffic is routed to prevent IP address leaks. Default setting works for most VPN users.</small>
         </p>
       </div>
+      
+      <div class="rule-item" style="text-align:left;">
+        <p>
+          <strong>Location Spoofing</strong><br>
+          <select id="location_config" style="width:100%; margin-top:8px;">
+            <option value="browserDefault">Browser Default</option>
+            <option value="matchIP">Match IP Address (Recommended)</option>
+            <option value="custom">Custom Location</option>
+          </select>
+          <small>Override browser's timezone, geolocation, and locale. Match IP Address automatically uses your current IP location.</small>
+        </p>
+      </div>
+      
+      <div id="custom_location_fields" style="display:none;">
+        <div class="rule-item" style="text-align:left;">
+          <p>
+            <strong>Time Zone</strong><br>
+            <input id="timezone" placeholder="e.g., America/New_York" style="width:100%; margin-top:8px;" />
+          </p>
+        </div>
+        <div class="rule-item" style="text-align:left;">
+          <p>
+            <strong>Locale</strong><br>
+            <input id="locale" placeholder="e.g., en-US" style="width:100%; margin-top:8px;" />
+          </p>
+        </div>
+        <div class="rule-item" style="text-align:left;">
+          <p>
+            <strong>Coordinates</strong><br>
+            <div style="display:flex; gap:10px; margin-top:8px;">
+              <input id="latitude" type="number" placeholder="Latitude" style="flex:1;" step="any" />
+              <input id="longitude" type="number" placeholder="Longitude" style="flex:1;" step="any" />
+            </div>
+          </p>
+        </div>
+      </div>
+      
       <div align="center">
         <button id="save_settings">Save</button>
       </div>

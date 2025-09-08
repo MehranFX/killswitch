@@ -390,12 +390,77 @@ class PopupManager {
             } else {
                 console.error('❌ IP element not found!');
             }
+            
+            // Update location display
+            await this.updateLocationDisplay();
+            
         } catch (error) {
             console.error('❌ Error updating IP display:', error);
             const ipElement = document.getElementById('current_ip');
             if (ipElement) {
                 ipElement.textContent = 'Error';
             }
+        }
+    }
+
+    /**
+     * Update location display in popup
+     */
+    static async updateLocationDisplay() {
+        try {
+            console.log('🌍 Updating location display...');
+            
+            // Get location data from storage
+            const result = await chrome.storage.local.get([
+                'location_config', 'timezone', 'locale', 'latitude', 'longitude',
+                'ip_country', 'ip_flag'
+            ]);
+            
+            const locationElement = document.getElementById('location_text');
+            const timezoneElement = document.getElementById('timezone_text');
+            const localeElement = document.getElementById('locale_text');
+            
+            if (result.location_config === 'browserDefault') {
+                // Show browser default
+                if (locationElement) locationElement.textContent = 'Browser Default';
+                if (timezoneElement) timezoneElement.textContent = 'Browser Default';
+                if (localeElement) localeElement.textContent = 'Browser Default';
+            } else if (result.location_config === 'matchIP') {
+                // Show IP-based location
+                const country = result.ip_country || '';
+                const flag = result.ip_flag || '';
+                const location = country ? `${flag} ${country}` : 'Unknown';
+                
+                if (locationElement) locationElement.textContent = location;
+                if (timezoneElement) timezoneElement.textContent = result.timezone || 'Unknown';
+                if (localeElement) localeElement.textContent = result.locale || 'Unknown';
+            } else if (result.location_config === 'custom') {
+                // Show custom location
+                const lat = result.latitude || '';
+                const lon = result.longitude || '';
+                const location = (lat && lon) ? `${lat.toFixed(2)}, ${lon.toFixed(2)}` : 'Custom';
+                
+                if (locationElement) locationElement.textContent = location;
+                if (timezoneElement) timezoneElement.textContent = result.timezone || 'Custom';
+                if (localeElement) localeElement.textContent = result.locale || 'Custom';
+            } else {
+                // Fallback
+                if (locationElement) locationElement.textContent = 'Loading...';
+                if (timezoneElement) timezoneElement.textContent = 'Loading...';
+                if (localeElement) localeElement.textContent = 'Loading...';
+            }
+            
+            console.log('✅ Location display updated');
+            
+        } catch (error) {
+            console.error('❌ Error updating location display:', error);
+            const locationElement = document.getElementById('location_text');
+            const timezoneElement = document.getElementById('timezone_text');
+            const localeElement = document.getElementById('locale_text');
+            
+            if (locationElement) locationElement.textContent = 'Error';
+            if (timezoneElement) timezoneElement.textContent = 'Error';
+            if (localeElement) localeElement.textContent = 'Error';
         }
     }
 
@@ -478,6 +543,9 @@ class PopupManager {
             // Set up storage listener for real-time updates
             this.setupStorageListener();
             
+            // Set up message listener for location updates
+            this.setupMessageListener();
+            
             // Initialize event listeners
             this.initializeEventListeners();
             
@@ -508,6 +576,13 @@ class PopupManager {
                 }
             }
             
+            // Check if location data was updated
+            if (changes.timezone || changes.locale || changes.latitude || changes.longitude || 
+                changes.location_config || changes.ip_country || changes.ip_flag) {
+                console.log('🌍 Location data updated, refreshing display...');
+                this.updateLocationDisplay();
+            }
+            
             // Check if last update time changed
             if (changes.last_ip_update || changes.ipTimestamp) {
                 console.log('⏰ Update time changed, refreshing countdown...');
@@ -516,6 +591,24 @@ class PopupManager {
         });
         
         console.log('✅ Storage listener set up');
+    }
+
+    /**
+     * Set up message listener for location updates
+     */
+    static setupMessageListener() {
+        console.log('🔧 Setting up message listener...');
+        
+        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            console.log('📨 Message received:', request);
+            
+            if (request.type === 'locationUpdated') {
+                console.log('🌍 Location updated via message:', request);
+                this.updateLocationDisplay();
+            }
+        });
+        
+        console.log('✅ Message listener set up');
     }
 
     /**
