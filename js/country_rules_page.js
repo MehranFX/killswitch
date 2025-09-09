@@ -97,7 +97,7 @@
     const existing = await chrome.storage.local.get(['country_rules']);
     const rules = existing.country_rules || [];
     
-    console.log('Refreshing saved rules:', rules);
+    // Log removed
     
     savedListEl.innerHTML = '';
     rules.forEach((r, idx)=>{
@@ -115,7 +115,7 @@
       }).join(' ');
       const modeLabel = r.mode === 'whitelist' ? 'Whitelist' : 'Blacklist';
       
-      console.log('Rendering rule:', { domain: r.domain, mode: r.mode, modeLabel, countries: r.countries });
+      // Log removed
       
       row.innerHTML = `<span style="font-weight:600;">${r.domain}</span>
                        <span style=\"color:#6c757d;\">${modeLabel}</span>
@@ -134,7 +134,7 @@
             await chrome.runtime.sendMessage({type: "update"});
             await chrome.runtime.sendMessage({type: "refreshIP"});
         } catch (error) {
-            console.warn('Failed to notify background:', error);
+            // Warning removed
         }
       };
       savedListEl.appendChild(row);
@@ -151,7 +151,7 @@
     
     // Support multiple comma-separated domains
     const parts = raw.split(',').map(s=> (s||'').trim()).filter(Boolean);
-    console.log('Saving country rules (batch):', { input: raw, parts, mode, countries: countriesArr });
+    // Log removed
     
     const existing = await chrome.storage.local.get(['country_rules']);
     const rules = existing.country_rules || [];
@@ -166,9 +166,9 @@
         const idx = rules.findIndex(r=> r.domain === domain);
         const newRule = { domain, mode, countries: countriesArr };
         if (idx>=0) rules[idx] = newRule; else rules.push(newRule);
-        console.log('Added/Updated rule:', newRule);
+        // Log removed
       } catch (err) {
-        console.warn('Failed to process domain:', domain, err);
+        // Warning removed
         invalids.push(domain);
       }
     }
@@ -185,7 +185,7 @@
         await chrome.runtime.sendMessage({type: "update"});
         await chrome.runtime.sendMessage({type: "refreshIP"});
     } catch (error) {
-        console.warn('Failed to notify background:', error);
+        // Warning removed
     }
   };
 

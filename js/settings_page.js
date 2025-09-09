@@ -64,7 +64,7 @@
         };
       }
     } catch (error) {
-      console.error('Error fetching IP location:', error);
+      // Error removed
     }
     return null;
   }
@@ -142,6 +142,14 @@
         locale = ipLocation.locale;
         latitude = ipLocation.latitude;
         longitude = ipLocation.longitude;
+        
+        // Store IP-based timezone and locale for getTimezoneSettings
+        await chrome.storage.local.set({
+          current_timezone: ipLocation.timezone,
+          current_locale: ipLocation.locale
+        });
+        
+        // Log removed
       }
     }
     
@@ -177,10 +185,10 @@
         policy: policy
       });
       if (!response.success) {
-        console.error('Failed to update WebRTC policy:', response.error);
+        // Error removed
       }
     } catch (error) {
-      console.error('Error updating WebRTC policy:', error);
+      // Error removed
     }
     
     // Apply location spoofing via background script
@@ -194,10 +202,10 @@
         longitude: longitude
       });
       if (!response.success) {
-        console.error('Failed to update location spoofing:', response.error);
+        // Error removed
       }
     } catch (error) {
-      console.error('Error updating location spoofing:', error);
+      // Error removed
     }
     
     const msg = document.getElementById('message');

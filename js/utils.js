@@ -149,7 +149,7 @@ class IPUtils {
                     }
                 }
             } catch (error) {
-                console.warn(`Failed to get IP from ${service}:`, error);
+                // Warning removed
             }
         }
         throw new Error('All IP services failed');
@@ -176,7 +176,7 @@ class IPUtils {
             });
             return ip;
         } catch (error) {
-            console.error('Error getting cached IP:', error);
+            // Error removed
             throw error;
         }
     }
@@ -189,7 +189,7 @@ class ErrorHandler {
      * @param {string} context - Context where error occurred
      */
     static async handle(error, context) {
-        console.error(`Error in ${context}:`, error);
+        // Error removed
         
         // Log error for debugging
         await this.logError(error, context);
@@ -216,7 +216,7 @@ class ErrorHandler {
                 lastError: errorLog
             });
         } catch (logError) {
-            console.error('Failed to log error:', logError);
+            // Error removed
         }
     }
 
@@ -312,7 +312,7 @@ class URLUtils {
             return accessUrl === urlPattern;
             
         } catch (error) {
-            console.error('Error in matchingDomainRegex:', error);
+            // Error removed
             return false;
         }
     }

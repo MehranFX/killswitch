@@ -54,7 +54,7 @@ class PopupManager {
             }, 1500);
             
         } catch (error) {
-            console.error('Error storing URL:', error);
+            // Error removed
             this.showMessage(`Error: ${error.message}`, 'error');
         } finally {
             this.showLoading(false);
@@ -128,7 +128,7 @@ class PopupManager {
     static async refreshIP(options = { manual: false }) {
         // Prevent multiple simultaneous refreshes
         if (this.isRefreshing) {
-            console.log('⏳ Refresh already in progress, skipping...');
+            // Log removed
             return;
         }
         
@@ -138,7 +138,7 @@ class PopupManager {
             // Update status immediately
             const statusElement = document.getElementById('ip_status_text');
             if (statusElement) statusElement.textContent = 'Refreshing...';
-            console.log('🔄 Starting IP refresh...');
+            // Log removed
             // hide current IP to avoid flicker
             const ipEl = document.getElementById('current_ip');
             if (ipEl) ipEl.textContent = '...';
@@ -160,10 +160,10 @@ class PopupManager {
                 )
             ]);
             
-            console.log('📨 Refresh response:', response);
+            // Log removed
             
             if (response && response.success) {
-                console.log('✅ IP refresh response successful:', response);
+                // Log removed
                 if (options.manual) {
                     this.showMessage('IP refreshed successfully!', 'success');
                 }
@@ -171,13 +171,13 @@ class PopupManager {
                 await this.updateIPDisplay({ highlight: true });
                 // Recompute countdown immediately after refresh
                 this.updateCountdown();
-                console.log('✅ IP refresh completed successfully');
+                // Log removed
             } else {
-                console.error('❌ IP refresh failed:', response);
+                // Error removed
                 throw new Error(response?.error || 'Failed to refresh IP');
             }
         } catch (error) {
-            console.error('❌ Error refreshing IP:', error);
+            // Error removed
             this.showMessage(`Error refreshing IP: ${error.message}`, 'error');
         } finally {
             this.isRefreshing = false;
@@ -194,10 +194,10 @@ class PopupManager {
      */
     static async clearProxy() {
         try {
-            console.log('🧹 Clearing proxy settings...');
+            // Log removed
             
             const response = await chrome.runtime.sendMessage({type: "clearProxy"});
-            console.log('📨 Clear proxy response:', response);
+            // Log removed
             
             if (response && response.success) {
                 this.showMessage('Proxy settings cleared!', 'success');
@@ -205,7 +205,7 @@ class PopupManager {
                 this.showMessage('Failed to clear proxy settings', 'error');
             }
         } catch (error) {
-            console.error('❌ Error clearing proxy:', error);
+            // Error removed
             this.showMessage('Error clearing proxy settings', 'error');
         }
     }
@@ -215,7 +215,7 @@ class PopupManager {
      */
     static async refreshBrowser() {
         try {
-            console.log('🔄 Refreshing browser...');
+            // Log removed
             
             // Get current tab
             const tabs = await chrome.tabs.query({active: true, currentWindow: true});
@@ -226,7 +226,7 @@ class PopupManager {
                 this.showMessage('No active tab found', 'error');
             }
         } catch (error) {
-            console.error('❌ Error refreshing browser:', error);
+            // Error removed
             this.showMessage('Error refreshing browser', 'error');
         }
     }
@@ -236,7 +236,7 @@ class PopupManager {
      */
     static async restartBrowser() {
         try {
-            console.log('🔄 Restarting browser...');
+            // Log removed
             
             // Clear proxy first
             const response = await chrome.runtime.sendMessage({type: "clearProxy"});
@@ -263,7 +263,7 @@ class PopupManager {
                 this.showMessage('Failed to clear proxy', 'error');
             }
         } catch (error) {
-            console.error('❌ Error restarting browser:', error);
+            // Error removed
             this.showMessage('Error restarting browser', 'error');
         }
     }
@@ -273,7 +273,7 @@ class PopupManager {
      */
     static async forceRestart() {
         try {
-            console.log('💥 Force restarting...');
+            // Log removed
             
             // Force clear proxy first
             const response = await chrome.runtime.sendMessage({type: "forceClearProxy"});
@@ -312,7 +312,7 @@ class PopupManager {
                 this.showMessage('Failed to force clear proxy', 'error');
             }
         } catch (error) {
-            console.error('❌ Error force restarting:', error);
+            // Error removed
             this.showMessage('Error force restarting', 'error');
         }
     }
@@ -322,7 +322,7 @@ class PopupManager {
      */
     static async manualClear() {
         try {
-            console.log('🔧 Manual clear...');
+            // Log removed
             
             this.showMessage('Manual Clear Instructions:', 'success');
             
@@ -352,7 +352,7 @@ class PopupManager {
             }, 11000);
             
         } catch (error) {
-            console.error('❌ Error manual clear:', error);
+            // Error removed
             this.showMessage('Error manual clear', 'error');
         }
     }
@@ -362,7 +362,7 @@ class PopupManager {
      */
     static async updateIPDisplay(options = { highlight: false }) {
         try {
-            console.log('🔄 Updating IP display...');
+            // Log removed
             
             // Get IP from storage directly
             const result = await chrome.storage.local.get(['current_ip', 'cachedIP', 'ip_flag']);
@@ -370,13 +370,13 @@ class PopupManager {
             const ipElement = document.getElementById('current_ip');
             const flag = result.ip_flag || '';
             
-            console.log('📋 Storage result:', result);
-            console.log('🔍 Extracted IP:', ip);
+            // Log removed
+            // Log removed
             
             if (ipElement) {
                 const oldText = ipElement.textContent;
                 ipElement.textContent = `${flag ? flag + ' ' : ''}${ip || 'Loading...'}`;
-                console.log(`✅ IP element updated: "${oldText}" → "${ip}"`);
+                // Log removed
                 
                 // Highlight only when explicitly requested (end of refresh)
                 if (options.highlight && ip) {
@@ -388,14 +388,14 @@ class PopupManager {
                     }, 1500);
                 }
             } else {
-                console.error('❌ IP element not found!');
+                // Error removed
             }
             
             // Update location display
             await this.updateLocationDisplay();
             
         } catch (error) {
-            console.error('❌ Error updating IP display:', error);
+            // Error removed
             const ipElement = document.getElementById('current_ip');
             if (ipElement) {
                 ipElement.textContent = 'Error';
@@ -408,7 +408,7 @@ class PopupManager {
      */
     static async updateLocationDisplay() {
         try {
-            console.log('🌍 Updating location display...');
+            // Log removed
             
             // Get location data from storage
             const result = await chrome.storage.local.get([
@@ -450,10 +450,10 @@ class PopupManager {
                 if (localeElement) localeElement.textContent = 'Loading...';
             }
             
-            console.log('✅ Location display updated');
+            // Log removed
             
         } catch (error) {
-            console.error('❌ Error updating location display:', error);
+            // Error removed
             const locationElement = document.getElementById('location_text');
             const timezoneElement = document.getElementById('timezone_text');
             const localeElement = document.getElementById('locale_text');
@@ -472,7 +472,7 @@ class PopupManager {
         const statusElement = document.getElementById('ip_status_text');
         
         if (!countdownElement || !statusElement) {
-            console.log('❌ Countdown elements not found');
+            // Log removed
             return;
         }
 
@@ -483,8 +483,8 @@ class PopupManager {
             const updateInterval = 30 * 1000; // 30 seconds
             const timeUntilUpdate = updateInterval - timeSinceUpdate;
 
-            console.log('⏰ Countdown update:', {
-                lastUpdate: new Date(lastUpdate).toLocaleTimeString(),
+            // Countdown update
+            console.log({
                 timeSinceUpdate: Math.floor(timeSinceUpdate / 1000) + 's',
                 timeUntilUpdate: Math.floor(timeUntilUpdate / 1000) + 's',
                 isRefreshing: this.isRefreshing,
@@ -498,10 +498,10 @@ class PopupManager {
                 
                 // Auto-refresh IP when countdown reaches zero (only if not already refreshing)
                 if (!this.isRefreshing) {
-                    console.log('⏰ Countdown reached zero, auto-refreshing IP...');
+                    // Log removed
                     this.refreshIP();
                 } else {
-                    console.log('⏰ Countdown reached zero but refresh already in progress');
+                    // Log removed
                 }
             } else {
                 const minutes = Math.floor(timeUntilUpdate / 60000);
@@ -518,14 +518,14 @@ class PopupManager {
      */
     static async setUpPopup() {
         try {
-            console.log('🚀 Setting up popup...');
+            // Log removed
             
             // Wait a bit for storage to be ready
             await new Promise(resolve => setTimeout(resolve, 100));
             
-            console.log('🔍 Initial popup setup - checking storage...');
+            // Log removed
             const initialStorage = await chrome.storage.local.get(['current_ip', 'cachedIP', 'last_ip_update']);
-            console.log('📋 Initial storage:', initialStorage);
+            // Log removed
             
             // Update IP display
             await this.updateIPDisplay();
@@ -549,10 +549,10 @@ class PopupManager {
             // Initialize event listeners
             this.initializeEventListeners();
             
-            console.log('✅ Popup setup completed');
+            // Log removed
             
         } catch (error) {
-            console.error('Error setting up popup:', error);
+            // Error removed
             this.showMessage('Error initializing popup', 'error');
         }
     }
@@ -561,17 +561,17 @@ class PopupManager {
      * Set up storage listener for real-time updates
      */
     static setupStorageListener() {
-        console.log('🔧 Setting up storage listener...');
+        // Log removed
         
         chrome.storage.onChanged.addListener((changes, namespace) => {
-            console.log('📦 Storage changed:', changes);
+            // Log removed
             
             // Check if IP was updated
             if (changes.current_ip || changes.cachedIP) {
                 if (this.suppressStorageUpdates) {
-                    console.log('⏸ Suppressing IP update during manual refresh');
+                    // Log removed
                 } else {
-                    console.log('🔄 IP updated in storage, refreshing display...');
+                    // Log removed
                     this.updateIPDisplay();
                 }
             }
@@ -579,36 +579,36 @@ class PopupManager {
             // Check if location data was updated
             if (changes.timezone || changes.locale || changes.latitude || changes.longitude || 
                 changes.location_config || changes.ip_country || changes.ip_flag) {
-                console.log('🌍 Location data updated, refreshing display...');
+                // Log removed
                 this.updateLocationDisplay();
             }
             
             // Check if last update time changed
             if (changes.last_ip_update || changes.ipTimestamp) {
-                console.log('⏰ Update time changed, refreshing countdown...');
+                // Log removed
                 this.updateCountdown();
             }
         });
         
-        console.log('✅ Storage listener set up');
+        // Log removed
     }
 
     /**
      * Set up message listener for location updates
      */
     static setupMessageListener() {
-        console.log('🔧 Setting up message listener...');
+        // Log removed
         
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-            console.log('📨 Message received:', request);
+            // Log removed
             
             if (request.type === 'locationUpdated') {
-                console.log('🌍 Location updated via message:', request);
+                // Log removed
                 this.updateLocationDisplay();
             }
         });
         
-        console.log('✅ Message listener set up');
+        // Log removed
     }
 
     /**

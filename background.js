@@ -110,7 +110,6 @@ class IPUtils {
             });
             return ip;
         } catch (error) {
-            console.error('Error getting cached IP:', error);
             throw error;
         }
     }
@@ -138,7 +137,6 @@ class IPUtils {
             
             return country;
         } catch (error) {
-            console.error('Error getting cached country:', error);
             return null;
         }
     }
@@ -152,7 +150,7 @@ class IPUtils {
         
         for (const url of endpoints) {
             try {
-                console.log(`🌍 Trying country endpoint: ${url}`);
+                // Trying country endpoint
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), 5000);
                 const response = await fetch(url, { 
@@ -171,16 +169,16 @@ class IPUtils {
                     }
                     
                     if (country && country.length === 2) {
-                        console.log(`🌍 Country detected: ${country.toUpperCase()}`);
+                        // Country detected
                         return country.toUpperCase();
                     }
                 }
             } catch (error) {
-                console.warn(`Failed to get country from ${url}:`, error);
+                // Failed to get country from endpoint
             }
         }
         
-        console.warn('🌍 Failed to get country from all endpoints');
+        // Failed to get country from all endpoints
         return null;
     }
 
@@ -200,7 +198,6 @@ class IPUtils {
             });
             return ip;
         } catch (error) {
-            console.error('Error getting fresh IP:', error);
             throw error;
         }
     }
@@ -267,7 +264,6 @@ class IPUtils {
             
             return Math.max(0, timeRemaining);
         } catch (error) {
-            console.error('Error getting time until next update:', error);
             return 0;
         }
     }
@@ -288,7 +284,6 @@ class IPUtils {
 
 class ErrorHandler {
     static async handle(error, context) {
-        console.error(`Error in ${context}:`, error);
         await this.logError(error, context);
     }
 
@@ -305,7 +300,7 @@ class ErrorHandler {
                 lastError: errorLog
             });
         } catch (logError) {
-            console.error('Failed to log error:', logError);
+            // Failed to log error
         }
     }
 }
@@ -347,7 +342,7 @@ class URLUtils {
             hostPattern = `((?:[^/]*\\.)?${exact})`;
         }
         const regex = `^https?://${hostPattern}(?:/|$)`;
-        console.log(`🎯 DNR regex for ${domain}: ${regex}`);
+        // DNR regex generated
         return regex;
     }
 
@@ -361,13 +356,13 @@ class URLUtils {
             
             // Handle wildcard patterns
             if (urlPattern.includes('*')) {
-                console.log(`🔍 Checking wildcard pattern: ${urlPattern} against ${accessHostname}`);
+                // Checking wildcard pattern
                 
                 // Special handling for *.binance.*
                 if (urlPattern === '*.binance.*') {
                     const binancePatterns = ['binance.com', 'www.binance.com', 'api.binance.com', 'binance.org', 'www.binance.org'];
                     const matches = binancePatterns.some(pattern => accessHostname === pattern || accessHostname.endsWith('.' + pattern));
-                    console.log(`🔍 Binance pattern check: ${matches}`);
+                    // Binance pattern check
                     return matches;
                 }
                 
@@ -385,7 +380,7 @@ class URLUtils {
                         accessHostname.includes('bingx') ||
                         accessHostname.includes('bingx.com')
                     );
-                    console.log(`🔍 BingX pattern check: ${matches}`);
+                    // BingX pattern check
                     return matches;
                 }
                 
@@ -413,7 +408,7 @@ class URLUtils {
                 
                 const regex = new RegExp(regexPattern, 'i');
                 const result = regex.test(accessHostname);
-                console.log(`🔍 Regex pattern: ${regexPattern}, result: ${result}`);
+                // Regex pattern check
                 return result;
             }
             
@@ -428,7 +423,6 @@ class URLUtils {
             return accessUrl === urlPattern;
             
         } catch (error) {
-            console.error('Error in matchingDomainRegex:', error);
             return false;
         }
     }
@@ -442,7 +436,7 @@ class BackgroundManager {
         try {
             // No need to copy to localStorage in service worker
             // Data is already available through chrome.storage.local
-            console.log('Storage updated successfully');
+            // Storage updated successfully
         } catch (error) {
             await ErrorHandler.handle(error, 'updateLocalStorage');
         }
@@ -480,7 +474,7 @@ class BackgroundManager {
                 this._bootstrapAppliedTs = now;
             }
         } catch (e) {
-            console.warn('Bootstrap routing error:', e);
+            // Bootstrap routing error
         }
     }
 
@@ -494,35 +488,34 @@ class BackgroundManager {
             const tabColor = tabColorData[`tabColors${tabID}`];
             let iconPath = '/img/icon-48x48-grey.png';
             
-            console.log(`🎨 Setting color for tab ${tabID}: ${tabColor}`);
+            // Setting color for tab
             
             if (tabColor === 'red') {
                 iconPath = '/img/icon-48x48-red.png';
-                console.log('🔴 Setting RED icon');
+                // Setting RED icon
             } else if (tabColor === 'green') {
                 iconPath = '/img/icon-48x48-green.png';
-                console.log('🟢 Setting GREEN icon');
+                // Setting GREEN icon
             } else {
-                console.log('⚫ Setting GREY icon (default)');
+                // Setting GREY icon (default)
             }
             
             // Set icon for all tabs (not just specific tab)
             await chrome.action.setIcon({ path: iconPath });
-            console.log(`✅ Icon set to: ${iconPath}`);
+            // Icon set
             
             // Also set for specific tab if possible
             if (tabID && tabID > 0) {
                 try {
                     await chrome.tabs.get(tabID);
                     // Tab exists, we can set specific icon
-                    console.log(`✅ Icon set for tab ${tabID}`);
+                    // Icon set for tab
                 } catch (tabError) {
-                    console.log(`⚠️ Tab ${tabID} not found, using global icon`);
+                    // Tab not found, using global icon
                 }
             }
             
         } catch (error) {
-            console.error('❌ Error in setColor:', error);
             await ErrorHandler.handle(error, 'setColor');
         }
     }
@@ -566,13 +559,7 @@ class BackgroundManager {
                     }
                     
                     // Debug logging
-                    console.log('Domain matched:', storedUrls[domainIndex]);
-                    console.log('Current IP:', userIP);
-                    console.log('Allowed IPs:', currentIPs);
-                    
                     shouldBlock = this.checkIPRules(userIP, currentIPs);
-                    
-                    console.log('Should block:', shouldBlock);
                     
                 } catch (error) {
                     await ErrorHandler.handle(error, 'validateIP - IP fetch');
@@ -610,29 +597,24 @@ class BackgroundManager {
      * @returns {boolean} - Whether to block
      */
     static checkIPRules(userIP, rules) {
-        console.log(`🔍 checkIPRules called with IP: ${userIP}, Rules: [${rules.join(', ')}]`);
-        
         if (!rules || rules.length === 0) {
-            console.log('✅ No rules, allowing');
             return false;
         }
         
         const whitelistExists = rules.some(ip => !ip.startsWith('!'));
         const blacklistExists = rules.some(ip => ip.startsWith('!'));
         
-        console.log(`🔍 Whitelist exists: ${whitelistExists}, Blacklist exists: ${blacklistExists}`);
+        // Checking whitelist/blacklist rules
         
         for (const rule of rules) {
             const isNegative = rule.startsWith('!');
             const ip = isNegative ? rule.substring(1) : rule;
             
-            console.log(`🔍 Checking rule: ${rule} (isNegative: ${isNegative}, ip: ${ip})`);
+            // Checking rule
             
             if (isNegative && userIP === ip) {
-                console.log('🚫 IP found in blacklist, blocking');
                 return true; // Block if IP is in blacklist
             } else if (!isNegative && userIP === ip) {
-                console.log('✅ IP found in whitelist, allowing');
                 return false; // Allow if IP is in whitelist
             }
         }
@@ -640,16 +622,12 @@ class BackgroundManager {
         // If whitelist exists and IP not found, block
         // If only blacklist exists and IP not found, allow
         if (whitelistExists && !blacklistExists) {
-            console.log('🚫 Whitelist exists but IP not found, blocking');
             return true; // Block if whitelist exists but IP not found
         } else if (!whitelistExists && blacklistExists) {
-            console.log('✅ Only blacklist exists and IP not found, allowing');
             return false; // Allow if only blacklist exists and IP not found
         } else if (whitelistExists && blacklistExists) {
-            console.log('🚫 Both whitelist and blacklist exist but IP not found, blocking (whitelist takes precedence)');
             return true; // Block if both exist but IP not found (whitelist takes precedence)
         } else {
-            console.log('✅ No rules, allowing');
             return false; // No rules, allow
         }
     }
@@ -663,63 +641,43 @@ class BackgroundManager {
      */
     static async checkCountryRules(url, userIP, userCountry) {
         try {
-            console.log(`🌍 checkCountryRules called for URL: ${url}, IP: ${userIP}, Country: ${userCountry}`);
-            
             const storageData = await chrome.storage.local.get(['country_rules']);
             const countryRules = storageData.country_rules || [];
             
-            console.log(`🌍 Raw country rules from storage:`, countryRules);
-            
             if (countryRules.length === 0) {
-                console.log('✅ No country rules, allowing');
                 return false;
             }
             
-            console.log(`🌍 Found ${countryRules.length} country rules`);
-            
             for (const rule of countryRules) {
-                console.log(`🌍 Checking country rule:`, rule);
-                console.log(`🌍 Rule domain: ${rule.domain}, mode: ${rule.mode}, countries: [${rule.countries.join(', ')}]`);
-                
                 // Check if URL matches the domain pattern
                 const domainMatch = URLUtils.matchingDomainRegex(url, rule.domain);
-                console.log(`🌍 Domain match for ${rule.domain}: ${domainMatch}`);
                 
                 if (domainMatch) {
-                    console.log(`🌍 Country rule matched: ${rule.domain}`);
-                    console.log(`🌍 Rule mode: ${rule.mode}, Countries: [${rule.countries.join(', ')}]`);
-                    console.log(`🌍 User country: ${userCountry}`);
                     
                     const isCountryAllowed = rule.countries.includes(userCountry);
-                    console.log(`🌍 Is country allowed: ${isCountryAllowed}`);
+                    // Checking if country is allowed
                     
                     if (rule.mode === 'whitelist') {
                         if (isCountryAllowed) {
-                            console.log('✅ Country found in whitelist, allowing');
                             return false; // Allow
                         } else {
-                            console.log('🚫 Country not in whitelist, blocking');
                             return true; // Block
                         }
                     } else if (rule.mode === 'blacklist') {
                         if (isCountryAllowed) {
-                            console.log('🚫 Country found in blacklist, blocking');
                             return true; // Block
                         } else {
-                            console.log('✅ Country not in blacklist, allowing');
                             return false; // Allow
                         }
                     }
                 } else {
-                    console.log(`🌍 Domain ${rule.domain} does not match ${url}`);
+                    // Domain does not match
                 }
             }
             
-            console.log('✅ No country rules matched, allowing');
             return false;
             
         } catch (error) {
-            console.error('❌ Error in checkCountryRules:', error);
             await ErrorHandler.handle(error, 'checkCountryRules');
             return false; // Allow on error
         }
@@ -729,7 +687,7 @@ class BackgroundManager {
      * Update IP and rules - core update logic
      */
     static async updateIPAndRules() {
-        console.log('🔄 Updating IP and rules...');
+        // Log removed
         try {
             // 1) Get a STABLE IP (multiple probes to avoid flicker)
             const freshIP = await this.getStablePublicIP();
@@ -750,12 +708,12 @@ class BackgroundManager {
             
             // Update location spoofing if set to match IP
             const locationData = await chrome.storage.local.get(['location_config']);
-            console.log('🌍 updateIPAndRules: location_config:', locationData.location_config);
+            // Log removed
             if (locationData.location_config === 'matchIP' || !locationData.location_config) {
-                console.log('🌍 IP changed, updating location spoofing...');
+                // Log removed
                 const ipLocation = await this.fetchIPLocation();
                 if (ipLocation) {
-                    console.log('🌍 IP location fetched in updateIPAndRules:', ipLocation);
+                    // Log removed
                     await chrome.storage.local.set({
                         timezone: ipLocation.timezone,
                         locale: ipLocation.locale,
@@ -765,7 +723,7 @@ class BackgroundManager {
                     
                     // Re-attach debugger to all tabs with new values
                     await this.updateAllTabsWithNewLocation(ipLocation);
-                    console.log('🌍 Location spoofing updated for new IP:', ipLocation);
+                    // Log removed
                     
                     // Store IP-based timezone and locale for getTimezoneSettings
                     await chrome.storage.local.set({
@@ -775,7 +733,7 @@ class BackgroundManager {
                         locale: ipLocation.locale
                     });
                     
-                    console.log('🌍 Stored IP-based timezone in updateIPAndRules:', ipLocation.timezone, 'locale:', ipLocation.locale);
+                    // Log removed
                     
                     // Notify popup to update display
                     try {
@@ -796,15 +754,15 @@ class BackgroundManager {
                             }
                         }
                     } catch (e) {
-                        console.log('⚠️ Could not notify popup:', e.message);
+                        // Log removed
                     }
                 }
             }
-            console.log(`✅ IP updated to: ${freshIP}`);
+            // Log removed
             
             // Verify IP was stored
             const stored = await chrome.storage.local.get(['current_ip', 'cachedIP', 'last_ip_update', 'ip_country', 'ip_flag']);
-            console.log('📋 Stored IP data:', stored);
+            // Log removed
             
             // 3) Update rules based on new IP
             await this.setupCachedRules();
@@ -818,10 +776,10 @@ class BackgroundManager {
                 await this.clearDynamicRules();
             }
             
-            console.log('✅ IP and rules update completed');
+            // Log removed
             
         } catch (error) {
-            console.error('❌ Failed to update IP and rules:', error);
+            // Error removed
             try { await chrome.proxy.settings.clear({}); } catch {}
         }
     }
@@ -867,7 +825,7 @@ class BackgroundManager {
             if (!ip) throw new Error('Empty IP from tab');
             return ip;
         } catch (e) {
-            console.warn('Active-tab IP fetch failed:', e.message || e);
+            // Warning removed
             throw e;
         }
     }
@@ -920,12 +878,12 @@ class BackgroundManager {
             // Apply WebRTC policy
             if (chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy) {
                 await chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: policy });
-                console.log('🔒 WebRTC policy set to:', policy);
+                // Log removed
             } else {
-                console.log('⚠️ WebRTC privacy API not available');
+                // Log removed
             }
         } catch (error) {
-            console.error('❌ Error initializing WebRTC:', error);
+            // Error removed
         }
     }
 
@@ -934,15 +892,15 @@ class BackgroundManager {
      */
     static async initializeLocationSpoofing() {
         try {
-            console.log('🌍 initializeLocationSpoofing: Starting...');
+            // Log removed
             const data = await chrome.storage.local.get(['location_config', 'timezone', 'locale', 'latitude', 'longitude']);
             const config = data.location_config || 'matchIP';
-            console.log('🌍 initializeLocationSpoofing: Config:', config, 'Data:', data);
+            // Log removed
             
             // Set default location_config if not set
             if (!data.location_config) {
                 await chrome.storage.local.set({ location_config: 'matchIP' });
-                console.log('🌍 Set default location_config to matchIP');
+                // Log removed
             }
             
             if (config !== 'browserDefault') {
@@ -953,10 +911,10 @@ class BackgroundManager {
                 
                 // If matchIP, fetch current IP location
                 if (config === 'matchIP') {
-                    console.log('🌍 Fetching IP location for matchIP...');
+                    // Log removed
                     const ipLocation = await this.fetchIPLocation();
                     if (ipLocation) {
-                        console.log('🌍 IP location fetched:', ipLocation);
+                        // Log removed
                         timezone = ipLocation.timezone;
                         locale = ipLocation.locale;
                         latitude = ipLocation.latitude;
@@ -968,7 +926,7 @@ class BackgroundManager {
                             current_locale: ipLocation.locale
                         });
                         
-                        console.log('🌍 Stored IP-based timezone in initializeLocationSpoofing:', ipLocation.timezone, 'locale:', ipLocation.locale);
+                        // Log removed
                         
                         // Also update the main timezone fields
                         await chrome.storage.local.set({
@@ -976,18 +934,18 @@ class BackgroundManager {
                             locale: ipLocation.locale
                         });
                     } else {
-                        console.log('❌ Failed to fetch IP location');
+                        // Log removed
                     }
                 } else {
-                    console.log('🌍 Not using matchIP, using existing timezone settings');
+                    // Log removed
                 }
                 
                 // Apply location spoofing to all tabs
                 await this.applyLocationSpoofing(timezone, locale, latitude, longitude);
-                console.log('🌍 Location spoofing initialized:', { timezone, locale, latitude, longitude });
+                // Log removed
             }
         } catch (error) {
-            console.error('❌ Error initializing location spoofing:', error);
+            // Error removed
         }
     }
 
@@ -996,10 +954,10 @@ class BackgroundManager {
      */
     static async fetchIPLocation() {
         try {
-            console.log('🌍 fetchIPLocation: Starting...');
+            // Log removed
             const response = await fetch(`http://ip-api.com/json?fields=status,message,countryCode,lat,lon,timezone,query&ts=${Date.now()}` , { cache: 'no-store' });
             const data = await response.json();
-            console.log('🌍 fetchIPLocation: Response:', data);
+            // Log removed
             if (data.status === 'success') {
                 const result = {
                     timezone: data.timezone,
@@ -1007,13 +965,13 @@ class BackgroundManager {
                     latitude: data.lat,
                     longitude: data.lon
                 };
-                console.log('🌍 fetchIPLocation: Result:', result);
+                // Log removed
                 return result;
             } else {
-                console.log('❌ fetchIPLocation: API error:', data.message);
+                // Log removed
             }
         } catch (error) {
-            console.error('❌ Error fetching IP location:', error);
+            // Error removed
         }
         return null;
     }
@@ -1077,7 +1035,7 @@ class BackgroundManager {
                 }
             }
         } catch (error) {
-            console.error('❌ Error applying location spoofing:', error);
+            // Error removed
         }
     }
 
@@ -1086,7 +1044,7 @@ class BackgroundManager {
      */
     static async updateAllTabsWithNewLocation(ipLocation) {
         try {
-            console.log('🔄 Updating all tabs with new location:', ipLocation);
+            // Log removed
             const tabs = await chrome.tabs.query({});
             
             for (const tab of tabs) {
@@ -1108,13 +1066,13 @@ class BackgroundManager {
                                             window.updateEarlyTimezoneSpoofing(tz, loc || 'en-US');
                                         }
                                     } catch (e) {
-                                        console.warn('⚠️ MAIN inject failed:', e);
+                                        // Warning removed
                                     }
                                 },
                                 args: [ipLocation.timezone, ipLocation.locale]
                             });
                         } catch (e) {
-                            console.warn(`⚠️ Direct inject failed for tab ${tab.id}:`, e.message);
+                            // Warning removed
                         }
 
                         // Then re-attach debugger to refresh CDP emulations (tz/geolocation)
@@ -1127,16 +1085,16 @@ class BackgroundManager {
                             ipLocation.longitude
                         );
 
-                        console.log(`✅ Updated tab ${tab.id} with new location: ${ipLocation.timezone}`);
+                        // Log removed
                     } catch (error) {
-                        console.warn(`⚠️ Failed to update tab ${tab.id}:`, error?.message || error);
+                        // Warning removed
                     }
                 }
             }
             
-            console.log('✅ All tabs updated with new location data');
+            // Log removed
         } catch (error) {
-            console.error('❌ Error updating all tabs with new location:', error);
+            // Error removed
         }
     }
 
@@ -1158,7 +1116,7 @@ class BackgroundManager {
                 tab.url.startsWith('edge-extension://') ||
                 tab.url.startsWith('about:') ||
                 tab.url.startsWith('file://')) {
-                console.log('⏭️ Skipping debugger for system URL:', tab.url);
+                // Log removed
                 return;
             }
             
@@ -1173,7 +1131,7 @@ class BackgroundManager {
                     { source: bootScript }
                 );
             } catch (e) {
-                console.log('⚠️ addScriptToEvaluateOnNewDocument failed:', e?.message || e);
+                // Log removed
             }
             
             if (timezone) {
@@ -1207,12 +1165,12 @@ class BackgroundManager {
             // Apply a JS fallback layer as well to defeat aggressive probes
             try {
                 await BackgroundManager.applyJSFallbackTimezone(tabId, timezone, locale);
-                console.log('🌍 Location spoofing applied (with JS fallback) to tab:', tabId);
+                // Log removed
             } catch (e) {
-                console.log('⚠️ JS fallback after debugger failed:', e?.message || e);
+                // Log removed
             }
             
-            console.log('🌍 Location spoofing applied to tab:', tabId);
+            // Log removed
         } catch (error) {
             if (error.message && (
                 error.message.includes('Another debugger is already attached') ||
@@ -1223,14 +1181,14 @@ class BackgroundManager {
                 if (error.message.includes('Another debugger is already attached')) {
                     try {
                         await BackgroundManager.applyJSFallbackTimezone(tabId, timezone, locale);
-                        console.log('🌍 Applied JS fallback timezone override to tab (DevTools open):', tabId);
+                        // Log removed
                     } catch (e) {
-                        console.warn('⚠️ JS fallback timezone override failed:', e.message);
+                        // Warning removed
                     }
                 }
                 return;
             }
-            console.warn('⚠️ Could not attach debugger to tab:', tabId, error.message);
+            // Warning removed
         }
     }
 
@@ -1285,13 +1243,13 @@ class BackgroundManager {
                             Object.defineProperty(navigator, 'languages', { get: () => [loc || 'en-US'], configurable: true });
                         } catch {}
                     } catch (e) {
-                        console.log('⚠️ JS fallback timezone error:', e);
+                        // Log removed
                     }
                 },
                 args: [timezone, locale]
             });
         } catch (e) {
-            console.warn('⚠️ Failed to execute JS fallback timezone script:', e.message);
+            // Warning removed
         }
     }
 
@@ -1300,23 +1258,23 @@ class BackgroundManager {
      */
     static async initialize() {
         try {
-            console.log('🚀 Kill Switch Initializing...');
+            // Log removed
             
             // Initialize WebRTC settings
-            console.log('🌍 Initializing WebRTC...');
+            // Log removed
             await this.initializeWebRTC();
             
             // First, get IP and set up rules
-            console.log('🌍 Updating IP and rules...');
+            // Log removed
             await this.updateIPAndRules();
             
             // Initialize location spoofing (after IP is fetched)
-            console.log('🌍 Initializing location spoofing...');
+            // Log removed
             try {
                 await this.initializeLocationSpoofing();
-                console.log('🌍 Location spoofing initialization completed');
+                // Log removed
             } catch (error) {
-                console.error('❌ Error in initializeLocationSpoofing:', error);
+                // Error removed
             }
             
             await this.updateLocalStorage();
@@ -1380,14 +1338,14 @@ class BackgroundManager {
                                 args: [timezone, locale]
                             });
                         } catch (e) {
-                            console.log('⚠️ Could not inject boot timezone values:', e?.message || e);
+                            // Log removed
                         }
                         
                         // Apply to new tab
                         await this.attachDebugger(details.tabId, timezone, locale, latitude, longitude);
                     }
                 } catch (error) {
-                    console.error('❌ Error in navigation listener:', error);
+                    // Error removed
                 }
             });
 
@@ -1456,14 +1414,14 @@ class BackgroundManager {
                                     args: [domain]
                                 });
                             } catch (error) {
-                                console.log('❌ Error storing domain in sessionStorage:', error);
+                                // Log removed
                             }
                         }
                     } catch (_) {}
                 });
-                console.log('✅ webNavigation onBeforeNavigate capture enabled');
+                // Log removed
             } catch (e) {
-                console.warn('webNavigation capture not available:', e);
+                // Warning removed
             }
             
             // Set up alarms for periodic tasks
@@ -1480,14 +1438,14 @@ class BackgroundManager {
      */
     static setupAlarms() {
         try {
-            console.log('⏰ Setting up alarms...');
+            // Log removed
             
             // Check if alarms API is available
             if (!chrome.alarms) {
-                console.warn('⚠️ Alarms API not available, using fallback timer');
+                // Warning removed
                 // Fallback: use setInterval instead
                 setInterval(() => {
-                    console.log('⏰ Fallback timer triggered');
+                    // Log removed
                     this.updateIPAndRules();
                 }, 30000); // 30 seconds
                 return;
@@ -1501,12 +1459,12 @@ class BackgroundManager {
             
             // Add a listener for when the alarm fires
             chrome.alarms.onAlarm.addListener(this.handleAlarm.bind(this));
-            console.log('✅ Alarms set up.');
+            // Log removed
         } catch (error) {
-            console.error('❌ Error setting up alarms:', error);
+            // Error removed
             // Fallback: use setInterval
             setInterval(() => {
-                console.log('⏰ Fallback timer triggered');
+                // Log removed
                 this.updateIPAndRules();
             }, 30000); // 30 seconds
         }
@@ -1518,7 +1476,7 @@ class BackgroundManager {
      */
     static async handleAlarm(alarm) {
         if (alarm.name === 'refreshIP') {
-            console.log('⏰ Alarm triggered: refreshIP');
+            // Log removed
             await this.updateIPAndRules();
         }
     }
@@ -1529,12 +1487,12 @@ class BackgroundManager {
      */
     static async forceClearProxyOnStartup() {
         try {
-            console.log('🚀 Force clearing proxy on startup...');
+            // Log removed
             
             // Multiple clear attempts
             for (let i = 0; i < 5; i++) {
                 await chrome.proxy.settings.clear({});
-                console.log(`✅ Clear attempt ${i + 1}`);
+                // Log removed
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
             
@@ -1543,17 +1501,17 @@ class BackgroundManager {
                 value: { mode: 'direct' },
                 scope: 'regular'
             });
-            console.log('✅ Direct connection set');
+            // Log removed
             
             // Wait a bit
             await new Promise(resolve => setTimeout(resolve, 500));
             
             // Clear again
             await chrome.proxy.settings.clear({});
-            console.log('✅ Final clear completed');
+            // Log removed
             
         } catch (error) {
-            console.error('❌ Error force clearing proxy on startup:', error);
+            // Error removed
         }
     }
 
@@ -1562,14 +1520,14 @@ class BackgroundManager {
      */
     static async refreshProxySettings() {
         try {
-            console.log('🔄 Refreshing proxy settings...');
+            // Log removed
             
             // Get current proxy settings
             const settings = await chrome.proxy.settings.get({});
             try {
-                console.log('📋 Current proxy settings (raw):', JSON.stringify(settings, null, 2));
+                // Log removed
             } catch (_) {
-                console.log('📋 Current proxy settings:', settings);
+                // Log removed
             }
             
             // Force a refresh by setting the same settings again
@@ -1578,12 +1536,12 @@ class BackgroundManager {
                     value: settings.value,
                     scope: 'regular'
                 });
-                console.log('✅ Proxy settings refreshed');
+                // Log removed
             } else {
-                console.log('ℹ️ No PAC script to refresh');
+                // Log removed
             }
         } catch (error) {
-            console.error('❌ Error refreshing proxy settings:', error);
+            // Error removed
         }
     }
 
@@ -1600,11 +1558,11 @@ class BackgroundManager {
                 proxySettings: settings,
                 activeTab,
             };
-            try { console.log('🧪 Proxy snapshot:', JSON.stringify(snapshot, null, 2)); } catch { console.log('🧪 Proxy snapshot:', snapshot); }
+            // Log removed
             await chrome.storage.local.set({ proxy_snapshot: snapshot });
             return snapshot;
         } catch (e) {
-            console.warn('Proxy snapshot failed:', e);
+            // Warning removed
             return null;
         }
     }
@@ -1614,7 +1572,7 @@ class BackgroundManager {
      * When a request fails because of our proxy, we redirect the tab to our custom block page.
      */
     static setupBlockedRequestDetection() {
-        console.log('🔧 Setting up blocked request detection...');
+        // Log removed
         this._proxyErrorCount = 0;
         // Pre-capture main_frame navigations that will be blocked (for accurate blocked domain on custom page)
         try {
@@ -1654,13 +1612,13 @@ class BackgroundManager {
                 { urls: ["<all_urls>"] }
             );
         } catch (e) {
-            console.warn('onBeforeRequest pre-capture not available:', e);
+            // Warning removed
         }
         chrome.webRequest.onErrorOccurred.addListener(
             async (details) => {
-                console.log('🔍 ===== WEBREQUEST ERROR DETECTED =====');
-                console.log('🔍 WebRequest error detected:', details.error, 'for URL:', details.url);
-                console.log('🔍 Tab ID:', details.tabId, 'Frame ID:', details.frameId);
+                // Log removed
+                // Log removed
+                // Log removed
                 
                 // These errors indicate the proxy blocked the connection
                 const proxyErrors = [
@@ -1671,7 +1629,7 @@ class BackgroundManager {
                 ];
 
                 if (proxyErrors.includes(details.error) && details.tabId > 0) {
-                    console.log(`🚫 Proxy error detected for ${details.url}. Error: ${details.error}`);
+                    // Log removed
                     // Auto-recovery: if fallback is enabled and repeated proxy errors occur, disable and clear
                     const cfg = await chrome.storage.local.get(['fallback_enabled']);
                     if (cfg.fallback_enabled) {
@@ -1679,7 +1637,7 @@ class BackgroundManager {
                         clearTimeout(this._proxyErrorTimer);
                         this._proxyErrorTimer = setTimeout(()=>{ this._proxyErrorCount = 0; }, 3000);
                         if (this._proxyErrorCount >= 3) {
-                            console.warn('⚠️ Repeated proxy failures detected. Disabling fallback and clearing proxy.');
+                            // Warning removed
                             await this.recoverFromProxyFailure();
                             this._proxyErrorCount = 0;
                         }
@@ -1689,20 +1647,20 @@ class BackgroundManager {
                     const shouldBlock = await this.shouldBlockURL(details.url);
                     
                     if (shouldBlock) {
-                        console.log(`🎯 URL ${details.url} matches blocking rules, replacing with custom page.`);
+                        // Log removed
                         try {
                             // Store the original URL so the blocked page can display it
                             const domain = URLUtils.getHostFromURL(details.url);
-                            console.log('🔍 Blocking URL:', details.url);
-                            console.log('🔍 Extracted domain:', domain);
-                            console.log('🔍 Tab ID:', details.tabId);
+                            // Log removed
+                            // Log removed
+                            // Log removed
                             
                             // Test URL parsing
                             try {
                                 const testUrl = new URL(details.url);
-                                console.log('🔍 Test URL parsing - hostname:', testUrl.hostname);
+                                // Log removed
                             } catch (error) {
-                                console.log('❌ Error parsing URL:', error);
+                                // Log removed
                             }
                             await chrome.storage.local.set({ 
                                 [`blockedUrl_${details.tabId}`]: details.url,
@@ -1716,14 +1674,14 @@ class BackgroundManager {
                                     current_blocked_domain: domain
                                 });
                             } catch (error) {
-                                console.log('❌ Error storing in session storage:', error);
+                                // Log removed
                             }
                             
-                            console.log('✅ Stored domain in storage:', domain);
+                            // Log removed
                             
                             // Update the tab to show our custom blocked page
                             const blockedPageUrl = chrome.runtime.getURL(`html/blocked.html?domain=${encodeURIComponent(domain)}`);
-                            console.log('🔍 Redirecting to blocked page:', blockedPageUrl);
+                            // Log removed
                             
                             // Store domain in sessionStorage for the blocked page
                             try {
@@ -1735,29 +1693,29 @@ class BackgroundManager {
                                     args: [domain]
                                 });
                             } catch (error) {
-                                console.log('❌ Error storing domain in sessionStorage:', error);
+                                // Log removed
                             }
                             
                             await chrome.tabs.update(details.tabId, {
                                 url: blockedPageUrl
                             });
                             
-                            console.log(`✅ Tab ${details.tabId} redirected to custom blocked page.`);
+                            // Log removed
                         } catch (error) {
                             // It's possible the tab was closed before we could update it.
                             if (!error.message.includes('No tab with id')) {
-                                console.error(`❌ Error updating tab ${details.tabId}:`, error);
+                                // Error removed
                             }
                         }
                     } else {
-                        console.log(`ℹ️ URL ${details.url} blocked by proxy but not by our rules, ignoring.`);
-                        console.log(`ℹ️ This means the IP is in the whitelist and should be allowed.`);
+                        // Log removed
+                        // Log removed
                     }
                 }
             },
             { urls: ["<all_urls>"] }
         );
-        console.log('✅ Blocked request detection is active.');
+        // Log removed
 
         // Optional basic WebRTC leak mitigation when enabled
         chrome.storage.local.get(['webrtc_protect'], (cfg) => {
@@ -1773,7 +1731,7 @@ class BackgroundManager {
                     }
                 }
             } catch (e) {
-                console.warn('WebRTC privacy controls not available:', e);
+                // Warning removed
             }
         });
     }
@@ -1785,9 +1743,9 @@ class BackgroundManager {
         try {
             await chrome.storage.local.set({ fallback_enabled: false });
             await chrome.proxy.settings.clear({});
-            console.log('🧯 Recovery applied: fallback disabled and proxy cleared');
+            // Log removed
         } catch (e) {
-            console.error('Recovery failed:', e);
+            // Error removed
         }
     }
 
@@ -1799,12 +1757,12 @@ class BackgroundManager {
      */
     static async checkAndBlockTabImmediately(tabId, url) {
         try {
-            console.log('⚡ IMMEDIATE CHECK for tab', tabId, ':', url);
+            // Log removed
             
             const shouldBlock = await this.shouldBlockURL(url);
             
             if (shouldBlock) {
-                console.log('🚫 IMMEDIATE BLOCK for tab', tabId, ':', url);
+                // Log removed
                 
                 // Set tab color to red immediately
                 await chrome.storage.local.set({
@@ -1824,7 +1782,7 @@ class BackgroundManager {
                             current_blocked_domain: domain
                         });
                     } catch (error) {
-                        console.log('❌ Error storing in session storage:', error);
+                        // Log removed
                     }
                     
                     // Store domain in sessionStorage for the blocked page
@@ -1837,30 +1795,30 @@ class BackgroundManager {
                             args: [domain]
                         });
                     } catch (error) {
-                        console.log('❌ Error storing domain in sessionStorage:', error);
+                        // Log removed
                     }
                     
                     await chrome.tabs.update(tabId, {
                         url: blockedPageUrl
                     });
-                    console.log('✅ Tab', tabId, 'redirected to blocked page');
+                    // Log removed
                 } catch (redirectError) {
-                    console.error('❌ Error redirecting tab:', redirectError);
+                    // Error removed
                     
                     // Fallback: try to close the tab
                     try {
                         await chrome.tabs.remove(tabId);
-                        console.log('✅ Tab', tabId, 'closed as fallback');
+                        // Log removed
                     } catch (closeError) {
-                        console.error('❌ Error closing tab:', closeError);
+                        // Error removed
                     }
                 }
             } else {
-                console.log('✅ Tab', tabId, 'allowed:', url);
+                // Log removed
                 await this.updateTabColor(tabId, url);
             }
         } catch (error) {
-            console.error('❌ Error in checkAndBlockTabImmediately:', error);
+            // Error removed
         }
     }
 
@@ -1905,33 +1863,33 @@ class BackgroundManager {
      */
     static shouldBlockURLSync(url) {
         try {
-            console.log('🔍 Sync check for URL:', url);
+            // Log removed
             
             // Use cached data if available
             if (this._cachedRules && this._cachedRules.length > 0) {
-                console.log(`🔍 Using cached rules: ${this._cachedRules.length} rules`);
+                // Log removed
                 for (const rule of this._cachedRules) {
-                    console.log(`🔍 Checking rule: ${rule.domain} against ${url}`);
+                    // Log removed
                     const domainMatch = URLUtils.matchingDomainRegex(url, rule.domain);
-                    console.log(`🔍 Domain match: ${domainMatch}`);
+                    // Log removed
                     
                     if (domainMatch) {
-                        console.log(`🔍 Cached rule matched: ${rule.domain}`);
+                        // Log removed
                         const shouldBlock = this.checkIPRules(rule.currentIP, rule.allowedIPs);
-                        console.log(`🔍 Cached rule check: ${rule.domain} -> ${shouldBlock} (IP: ${rule.currentIP}, Allowed: ${rule.allowedIPs})`);
+                        // Log removed
                         return shouldBlock;
                     }
                 }
             } else {
-                console.log('⚠️ No cached rules available, falling back to storage');
+                // Log removed
                 // Fallback: return false for now, let the async version handle it
                 return false;
             }
             
-            console.log('✅ No cached rules matched, allowing');
+            // Log removed
             return false;
         } catch (error) {
-            console.error('❌ Error in shouldBlockURLSync:', error);
+            // Error removed
             return false;
         }
     }
@@ -1943,21 +1901,21 @@ class BackgroundManager {
      */
     static async shouldBlockURL(url) {
         try {
-            console.log('🔍 Checking URL:', url);
+            // Log removed
             
             // First, check country rules for ALL URLs
             try {
                 const userIP = await IPUtils.getCachedIP();
                 const userCountry = await IPUtils.getCachedCountry();
                 
-                console.log('🌍 Country check - IP:', userIP, 'Country:', userCountry);
+                // Log removed
                 
                 // Force country detection if not available
                 if (ValidationUtils.isValidIP(userIP) && !userCountry) {
-                    console.log('🌍 Country not cached, trying to detect...');
+                    // Log removed
                     const detectedCountry = await IPUtils.getCountryFromIP(userIP);
                     if (detectedCountry) {
-                        console.log('🌍 Country detected:', detectedCountry);
+                        // Log removed
                         await chrome.storage.local.set({
                             cachedCountry: detectedCountry,
                             countryTimestamp: Date.now()
@@ -1967,20 +1925,20 @@ class BackgroundManager {
                 }
                 
                 if (ValidationUtils.isValidIP(userIP) && userCountry) {
-                    console.log('🌍 Checking country rules for:', url, 'IP:', userIP, 'Country:', userCountry);
+                    // Log removed
                     const shouldBlockCountry = await this.checkCountryRules(url, userIP, userCountry);
                     
                     if (shouldBlockCountry) {
-                        console.log('🚫 Country rule matched, blocking');
+                        // Log removed
                         return true;
                     } else {
-                        console.log('✅ Country rules checked, no blocking required');
+                        // Log removed
                     }
                 } else {
-                    console.log('🌍 Skipping country rules - IP or Country not available');
+                    // Log removed
                 }
             } catch (error) {
-                console.error('❌ Error in country check:', error);
+                // Error removed
                 await ErrorHandler.handle(error, 'shouldBlockURL - Country check');
                 // Don't block on country check error, just log it
             }
@@ -1990,13 +1948,13 @@ class BackgroundManager {
             const storedUrls = storageData.urls || [];
             const storedIPs = storageData.allowed_ips || [];
             
-            console.log('📋 Stored URLs:', storedUrls);
-            console.log('📋 Stored IPs:', storedIPs);
+            // Log removed
+            // Log removed
             
             // Check if URL matches any stored domain
             for (let i = 0; i < storedUrls.length; i++) {
                 const domainMatches = URLUtils.matchingDomainRegex(url, storedUrls[i]);
-                console.log(`🔍 Checking domain ${storedUrls[i]}: ${domainMatches}`);
+                // Log removed
                 
                 if (domainMatches) {
                     const currentIPs = storedIPs[i] ? storedIPs[i].replace(/\|$/, '').split(',') : [];
@@ -2009,30 +1967,30 @@ class BackgroundManager {
                         }
                         
                         // Debug logging
-                        console.log('✅ Domain matched:', storedUrls[i]);
-                        console.log('🌐 Current IP:', userIP);
-                        console.log('📝 Allowed IPs:', currentIPs);
+                        // Log removed
+                        // Log removed
+                        // Log removed
                         
                         const shouldBlock = this.checkIPRules(userIP, currentIPs);
                         
-                        console.log('🚫 Should block:', shouldBlock);
-                        console.log(`🔍 Final decision: ${shouldBlock ? 'BLOCK' : 'ALLOW'} for ${url} (IP: ${userIP}, Allowed: [${currentIPs.join(', ')}])`);
+                        // Log removed
+                        // Log removed
                         
                         return shouldBlock;
                         
                     } catch (error) {
-                        console.error('❌ Error in IP check:', error);
+                        // Error removed
                         await ErrorHandler.handle(error, 'shouldBlockURL - IP fetch');
                         return true; // Block on error for security
                     }
                 }
             }
             
-            console.log('✅ No matching domain found, allowing request');
+            // Log removed
             return false; // No matching domain, don't block
             
         } catch (error) {
-            console.error('❌ Error in shouldBlockURL:', error);
+            // Error removed
             await ErrorHandler.handle(error, 'shouldBlockURL');
             return false;
         }
@@ -2066,7 +2024,7 @@ class BackgroundManager {
      */
     static async setupCachedRules() {
         try {
-            console.log('🔧 Setting up cached rules...');
+            // Log removed
             
             // Get all stored URLs for caching
             const storageData = await chrome.storage.local.get(['urls', 'allowed_ips', 'country_rules']);
@@ -2076,25 +2034,25 @@ class BackgroundManager {
             const currentIP = await IPUtils.getCachedIP();
             const currentCountry = await IPUtils.getCachedCountry();
             
-            console.log('📋 Stored URLs:', storedUrls);
-            console.log('📋 Stored IPs:', storedIPs);
-            console.log('📋 Country Rules:', countryRules);
-            console.log('📋 Current IP:', currentIP);
-            console.log('📋 Current Country:', currentCountry);
+            // Log removed
+            // Log removed
+            // Log removed
+            // Log removed
+            // Log removed
             
             // Cache rules for sync access
             this._cachedRules = [];
             this._blockedDomains = new Set();
             
-            console.log(`🔧 Processing ${storedUrls.length} stored URLs...`);
+            // Log removed
             
             for (let i = 0; i < storedUrls.length; i++) {
                 const domain = storedUrls[i];
                 const allowedIPsString = storedIPs[i] || '';
                 const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
                 
-                console.log(`🔧 Processing domain ${i + 1}/${storedUrls.length}: ${domain}`);
-                console.log(`🔧 Allowed IPs: [${allowedIPs.join(', ')}]`);
+                // Log removed
+                // Log removed
                 
                 this._cachedRules.push({
                     domain: domain,
@@ -2104,7 +2062,7 @@ class BackgroundManager {
                 
                 // Check if this domain should be blocked
                 const shouldBlock = this.checkIPRules(currentIP, allowedIPs);
-                console.log(`🔍 Domain: ${domain}, Should block: ${shouldBlock}, Current IP: ${currentIP}, Allowed IPs: ${allowedIPs}`);
+                // Log removed
                 
                 if (shouldBlock) {
                     // Convert wildcard domains to specific patterns
@@ -2115,31 +2073,31 @@ class BackgroundManager {
                             this._blockedDomains.add('api.binance.com');
                             this._blockedDomains.add('binance.org');
                             this._blockedDomains.add('www.binance.org');
-                            console.log('🚫 Added binance domains to blocked list');
+                            // Log removed
                         } else {
                             // General wildcard handling
                             const baseDomain = domain.replace(/^\*\./, '').replace(/\.\*$/, '');
                             this._blockedDomains.add(baseDomain);
                             this._blockedDomains.add(`www.${baseDomain}`);
-                            console.log(`🚫 Added wildcard domains to blocked list: ${baseDomain}`);
+                            // Log removed
                         }
                     } else {
                         this._blockedDomains.add(domain);
                         this._blockedDomains.add(`www.${domain}`);
-                        console.log(`🚫 Added domain to blocked list: ${domain}`);
+                        // Log removed
                     }
                 } else {
-                    console.log(`✅ Domain ${domain} is allowed for IP ${currentIP}`);
+                    // Log removed
                 }
             }
             
             // Process country rules
-            console.log(`🌍 Processing ${countryRules.length} country rules...`);
-            console.log(`🌍 Current country: ${currentCountry}`);
+            // Log removed
+            // Log removed
             
             for (const rule of countryRules) {
-                console.log(`🌍 Processing country rule: ${rule.domain} (${rule.mode})`);
-                console.log(`🌍 Rule countries: [${rule.countries.join(', ')}]`);
+                // Log removed
+                // Log removed
                 
                 const isCountryAllowed = rule.countries.includes(currentCountry);
                 let shouldBlockCountry = false;
@@ -2150,7 +2108,7 @@ class BackgroundManager {
                     shouldBlockCountry = isCountryAllowed;
                 }
                 
-                console.log(`🌍 Country rule result: ${rule.domain} -> ${shouldBlockCountry ? 'BLOCK' : 'ALLOW'} (Country: ${currentCountry}, Mode: ${rule.mode})`);
+                // Log removed
                 
                 if (shouldBlockCountry) {
                     // Add domain to blocked list
@@ -2164,25 +2122,25 @@ class BackgroundManager {
                                 'scripts.prdredir.com' // BingX scripts
                             ];
                             bingxRelatedDomains.forEach(d => this._blockedDomains.add(d));
-                            console.log(`🚫 Added country-blocked BingX related domains: ${bingxRelatedDomains.join(', ')}`);
+                            // Log removed
                         } else {
                             const baseDomain = rule.domain.replace(/^\*\./, '').replace(/\.\*$/, '');
                             this._blockedDomains.add(baseDomain);
                             this._blockedDomains.add(`www.${baseDomain}`);
-                            console.log(`🚫 Added country-blocked wildcard domain: ${baseDomain}`);
+                            // Log removed
                         }
                     } else {
                         this._blockedDomains.add(rule.domain);
-                        console.log(`🚫 Added country-blocked domain: ${rule.domain}`);
+                        // Log removed
                     }
                 }
             }
             
-            console.log('📋 Cached rules for sync access:', this._cachedRules);
-            console.log('🚫 Blocked domains:', Array.from(this._blockedDomains));
-            console.log(`✅ setupCachedRules completed: ${this._cachedRules.length} IP rules cached, ${countryRules.length} country rules processed, ${this._blockedDomains.size} domains blocked`);
+            // Log removed
+            // Log removed
+            // Log removed
         } catch (error) {
-            console.error('❌ Error setting up cached rules:', error);
+            // Error removed
         }
     }
 
@@ -2191,7 +2149,7 @@ class BackgroundManager {
      */
     static async setupProxyBlocking() {
         try {
-            console.log('🔧 Setting PAC for reliable, DNS-level blocking...');
+            // Log removed
 
             // Gather inputs
             const currentIP = await IPUtils.getCachedIP();
@@ -2233,30 +2191,30 @@ class BackgroundManager {
                 } else if (mode === 'direct' || mode === 'system') {
                     // Always respect system/direct: never set PAC; rely on DNR when needed
                     await chrome.proxy.settings.clear({});
-                    console.log('ℹ️ Respecting system/direct proxy mode. PAC cleared. Mode:', mode);
+                    // Log removed
                     return false;
                 } else if (mode === 'pac_script') {
                     // When user/system already has PAC, do not override unless we must block domains via sinkhole
                     if (blockedDomains.length === 0) {
-                        console.log('ℹ️ System PAC present and no blocked domains; leaving as-is.');
+                        // System PAC present and no blocked domains; leaving as-is
                         return false;
                     }
                 }
                 // If system proxy not detectable but user provided fallback_proxy, use it
                 // IMPORTANT: در حالت system/direct، از fallback کاربر استفاده نمی‌کنیم تا وقتی سیستم پروکسی خاموش است، مسیر DIRECT بماند
             } catch (e) {
-                console.warn('Proxy settings read failed:', e);
+                // Warning removed
             }
 
             // Generate and apply PAC
             const pacScript = this.generatePACScript(blockedDomains, currentIP, whitelistData, fallback);
             const proxyConfig = { mode: 'pac_script', pacScript: { data: pacScript } };
             await chrome.proxy.settings.set({ value: proxyConfig, scope: 'regular' });
-            console.log('✅ PAC applied');
+            // Log removed
             return true;
             
         } catch (error) {
-            console.error('❌ Error setting up proxy blocking:', error);
+            // Error removed
             return false;
         }
     }
@@ -2271,10 +2229,10 @@ class BackgroundManager {
         
         return `
 function FindProxyForURL(url, host) {
-    console.log("PAC: ===== PAC SCRIPT EXECUTED =====");
-    console.log("PAC: Checking URL:", url, "Host:", host);
-    console.log("PAC: Current IP:", "${currentIP}");
-    console.log("PAC: Whitelist data:", ${whitelistDataStr});
+    // Log removed
+    // Log removed
+    // Log removed
+    // Log removed
     
     var blockedDomains = ${blockedDomainsArray};
     var whitelistData = ${whitelistDataStr};
@@ -2284,7 +2242,7 @@ function FindProxyForURL(url, host) {
     
     // Check if this is already our blocked page - allow it
     if (url.indexOf("${blockedPageUrl}") === 0) {
-        console.log("PAC: ALLOWING blocked page:", url);
+        // Log removed
         return "DIRECT";
     }
 
@@ -2293,17 +2251,17 @@ function FindProxyForURL(url, host) {
     for (var bi = 0; bi < blockedDomains.length; bi++) {
         var bd = blockedDomains[bi];
         if (host === bd || host.endsWith('.' + bd)) {
-            console.log("PAC: PRE-BLOCK via blockedDomains:", host, "matched:", bd);
+            // Log removed
             return "PROXY 127.0.0.1:1";
         }
     }
     
     // Check if current IP is in whitelist for this domain
-    console.log("PAC: Checking", whitelistData.length, "whitelist entries");
+    // Log removed
     for (var i = 0; i < whitelistData.length; i++) {
         var domain = whitelistData[i].domain;
         var allowedIPs = whitelistData[i].allowedIPs;
-        console.log("PAC: Checking domain", domain, "with allowed IPs:", allowedIPs);
+        // Log removed
         
         // Check if host matches this domain
         var domainMatch = false;
@@ -2313,50 +2271,50 @@ function FindProxyForURL(url, host) {
             if (domain === '*.binance.*') {
                 // Match any binance domain
                 if (host.indexOf('binance') !== -1) {
-                    console.log("PAC: Binance wildcard matched for host:", host);
+                    // Log removed
                     domainMatch = true;
                 }
             } else if (domain.startsWith('*.')) {
                 // Match subdomains
                 var baseDomain = domain.substring(2);
                 if (host === baseDomain || host.endsWith('.' + baseDomain)) {
-                    console.log("PAC: Subdomain matched:", baseDomain, "for host:", host);
+                    // Log removed
                     domainMatch = true;
                 }
             } else if (domain.endsWith('.*')) {
                 // Match domains with same prefix
                 var prefix = domain.substring(0, domain.length - 2);
                 if (host.startsWith(prefix)) {
-                    console.log("PAC: Prefix matched:", prefix, "for host:", host);
+                    // Log removed
                     domainMatch = true;
                 }
             }
         } else {
             // Exact match
             if (host === domain) {
-                console.log("PAC: Exact match:", domain, "for host:", host);
+                // Log removed
                 domainMatch = true;
             } else if (host.endsWith('.' + domain)) {
-                console.log("PAC: Subdomain match:", domain, "for host:", host);
+                // Log removed
                 domainMatch = true;
             }
         }
         
         if (domainMatch) {
-            console.log("PAC: Domain matched:", domain, "for host:", host);
-            console.log("PAC: Checking IP:", currentIP, "against allowed IPs:", allowedIPs);
+            // Log removed
+            // Log removed
             
             // Check if current IP is in whitelist
             for (var j = 0; j < allowedIPs.length; j++) {
                 if (allowedIPs[j] === currentIP) {
-                    console.log("PAC: ALLOWING (IP in whitelist):", host, "IP:", currentIP);
+                    // Log removed
                     if (fallbackProxy && fallbackProxy.length > 0) {
                         return fallbackProxy;
                     }
                     return "DIRECT";
                 }
             }
-            console.log("PAC: BLOCKING (IP not in whitelist):", host, "IP:", currentIP);
+            // Log removed
             // Always sinkhole blocked domains to prevent load regardless of proxy
             return "PROXY 127.0.0.1:1";
         }
@@ -2371,8 +2329,8 @@ function FindProxyForURL(url, host) {
             }
         }
     }
-    console.log("PAC: ALLOWING (no domain match):", host);
-    console.log("PAC: ===== PAC SCRIPT COMPLETED =====");
+    // Log removed
+    // Log removed
     if (fallbackProxy && fallbackProxy.length > 0) {
         return fallbackProxy;
     }
@@ -2385,7 +2343,7 @@ function FindProxyForURL(url, host) {
      */
     static async setupDeclarativeNetRequest() {
         try {
-            console.log('🔧 Setting up declarativeNetRequest...');
+            // Log removed
             
             // Get all stored URLs for blocking
             const storageData = await chrome.storage.local.get(['urls', 'allowed_ips', 'country_rules']);
@@ -2393,8 +2351,8 @@ function FindProxyForURL(url, host) {
             const storedIPs = storageData.allowed_ips || [];
             const countryRules = storageData.country_rules || [];
             
-            console.log('📋 Stored URLs for blocking (raw):', JSON.stringify(storedUrls));
-            console.log('📋 Allowed IPs (raw):', JSON.stringify(storedIPs));
+            // Log removed
+            // Log removed
             
             // Clear existing rules (only ours: ids 1..999)
             const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
@@ -2406,8 +2364,8 @@ function FindProxyForURL(url, host) {
             // Get current IP and country
             const currentIP = await IPUtils.getCachedIP();
             const currentCountry = await IPUtils.getCachedCountry();
-            console.log('🌐 Current IP for rules:', currentIP);
-            console.log('🌍 Current Country for rules:', currentCountry);
+            // Log removed
+            // Log removed
             
             // Create rules for each URL
             const rules = [];
@@ -2421,14 +2379,14 @@ function FindProxyForURL(url, host) {
                     const allowedIPsString = storedIPs[i] || '';
                     const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
                     
-                    console.log(`🔍 Processing rule ${i + 1}:`);
-                    console.log(`   Domain: ${domain}`);
-                    console.log(`   Allowed IPs: [${allowedIPs.join(', ')}]`);
-                    console.log(`   Current IP: ${currentIP}`);
+                    // Log removed
+                    // Log removed
+                    // Log removed
+                    // Log removed
                     
                     // Check if current IP is allowed
                     const shouldBlock = this.checkIPRules(currentIP, allowedIPs);
-                    console.log(`   Should block: ${shouldBlock}`);
+                    // Log removed
                     
                     if (shouldBlock) {
                         // Create redirect rule to custom blocked page (so user always sees our page)
@@ -2447,19 +2405,19 @@ function FindProxyForURL(url, host) {
                         };
                         
                         rules.push(rule);
-                        console.log(`🚫 Added BLOCKING rule for ${domain}`);
-                        console.log(`   Regex: ${regexFilter}`);
+                        // Log removed
+                        // Log removed
                     } else {
-                        console.log(`✅ Skipping ${domain} - IP ${currentIP} is allowed`);
+                        // Log removed
                     }
                 } catch (error) {
-                    console.error(`❌ Error processing URL ${storedUrls[i]}:`, error);
+                    // Error removed
                 }
             }
             
             // Also add country-based blocking rules for immediate main-frame blocking
             if (countryRules && countryRules.length > 0 && currentCountry) {
-                console.log(`🌍 Processing ${countryRules.length} country rules for DNR...`);
+                // Log removed
                 for (const rule of countryRules) {
                     try {
                         const isCountryAllowed = (rule.countries || []).includes(currentCountry);
@@ -2478,7 +2436,7 @@ function FindProxyForURL(url, host) {
                                 action: { type: 'redirect', redirect: { extensionPath: '/html/blocked.html' } },
                                 condition: { regexFilter, resourceTypes: ['main_frame'] }
                             });
-                            console.log(`🚫 Added COUNTRY BLOCK rule for ${rule.domain} (mode: ${rule.mode}) -> ${regexFilter}`);
+                            // Log removed
 
                             // Special handling for *.bingx.com: include related domains that BingX uses
                             if (rule.domain === '*.bingx.com') {
@@ -2496,14 +2454,14 @@ function FindProxyForURL(url, host) {
                                         action: { type: 'redirect', redirect: { extensionPath: '/html/blocked.html' } },
                                         condition: { regexFilter: r, resourceTypes: ['main_frame'] }
                                     });
-                                    console.log(`🚫 Added COUNTRY BLOCK (bingx related) for ${d} -> ${r}`);
+                                    // Log removed
                                 }
                             }
                         } else {
-                            console.log(`✅ Country ALLOW for ${rule.domain} (mode: ${rule.mode})`);
+                            // Log removed
                         }
                     } catch (e) {
-                        console.warn('⚠️ Error processing country DNR rule:', e);
+                        // Warning removed
                     }
                 }
             }
@@ -2513,19 +2471,19 @@ function FindProxyForURL(url, host) {
                 await chrome.declarativeNetRequest.updateDynamicRules({
                     addRules: rules
                 });
-                console.log(`✅ Added ${rules.length} blocking rules to declarativeNetRequest`);
+                // Log removed
                 
                 // Log all active rules for debugging
                 const activeRules = await chrome.declarativeNetRequest.getDynamicRules();
-                console.log('📋 Active declarativeNetRequest rules:');
+                // Log removed
                 activeRules.forEach(rule => {
-                    console.log(`   Rule ${rule.id}: ${rule.condition.regexFilter} -> ${rule.action.type}`);
+                    // Log removed
                 });
             } else {
-                console.log('ℹ️ No blocking rules to add - all domains are allowed for current IP');
+                // Log removed
             }
             
-            console.log('✅ DeclarativeNetRequest setup completed');
+            // Log removed
             
             // Cache rules for sync access
             this._cachedRules = [];
@@ -2541,9 +2499,9 @@ function FindProxyForURL(url, host) {
                 });
             }
             
-            console.log('📋 Cached rules for sync access:', this._cachedRules);
+            // Log removed
         } catch (error) {
-            console.error('❌ Error setting up declarativeNetRequest:', error);
+            // Error removed
         }
     }
 
@@ -2559,12 +2517,12 @@ function FindProxyForURL(url, host) {
             if (existingRules && existingRules.length > 0) {
                 const ruleIdsToRemove = existingRules.map(rule => rule.id);
                 await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIdsToRemove });
-                console.log(`🧹 Cleared ${ruleIdsToRemove.length} dynamic DNR rules`);
+                // Log removed
             } else {
-                console.log('🧹 No dynamic DNR rules to clear');
+                // Log removed
             }
         } catch (error) {
-            console.error('❌ Error clearing dynamic DNR rules:', error);
+            // Error removed
         }
     }
 
@@ -2583,7 +2541,7 @@ function FindProxyForURL(url, host) {
                 });
             }
             
-            console.log('Blocking rules initialized');
+            // Log removed
             
             // Test wildcard functionality
             this.testWildcardFunctionality();
@@ -2596,10 +2554,10 @@ function FindProxyForURL(url, host) {
      * Test wildcard functionality
      */
     static testWildcardFunctionality() {
-        console.log('Testing wildcard functionality:');
+        // Log removed
         
         // Test domain validation first
-        console.log('Testing domain validation:');
+        // Log removed
         const domainTests = [
             { domain: '*.binance.*', expected: true },
             { domain: '*.example.com', expected: true },
@@ -2614,10 +2572,10 @@ function FindProxyForURL(url, host) {
         domainTests.forEach((test, index) => {
             const result = ValidationUtils.isValidDomain(test.domain);
             const status = result === test.expected ? '✅' : '❌';
-            console.log(`${status} Domain Test ${index + 1}: ${test.domain} = ${result} (expected: ${test.expected})`);
+            // Log removed
         });
         
-        console.log('\nTesting URL matching:');
+        // Log removed
         const testCases = [
             { pattern: '*.example.com', url: 'https://api.example.com/page', expected: true },
             { pattern: '*.example.com', url: 'https://www.example.com/page', expected: true },
@@ -2638,7 +2596,7 @@ function FindProxyForURL(url, host) {
         testCases.forEach((testCase, index) => {
             const result = URLUtils.matchingDomainRegex(testCase.url, testCase.pattern);
             const status = result === testCase.expected ? '✅' : '❌';
-            console.log(`${status} URL Test ${index + 1}: ${testCase.pattern} vs ${testCase.url} = ${result} (expected: ${testCase.expected})`);
+            // Log removed
         });
     }
 
@@ -2649,7 +2607,7 @@ function FindProxyForURL(url, host) {
      * @param {Function} sendResponse - Response function
      */
     static handleMessage(request, sender, sendResponse) {
-        console.log('📨 Message received:', request.type);
+        // Log removed
         
         // Handle async operations properly
         (async () => {
@@ -2679,14 +2637,14 @@ function FindProxyForURL(url, host) {
                         
                     case 'refreshIP':
                         try {
-                            console.log('🔄 refreshIP message received');
+                            // Log removed
                             await this.updateIPAndRules();
                             const result = await chrome.storage.local.get(['current_ip', 'cachedIP']);
                             const ip = result.current_ip || result.cachedIP;
-                            console.log('📤 Sending IP response:', ip);
+                            // Log removed
                             sendResponse({ success: true, ip: ip });
                         } catch (error) {
-                            console.error('❌ Error in refreshIP:', error);
+                            // Error removed
                             await ErrorHandler.handle(error, 'refreshIP');
                             sendResponse({ success: false, error: error.message });
                         }
@@ -2719,10 +2677,10 @@ function FindProxyForURL(url, host) {
                             const userIP = await IPUtils.getCachedIP();
                             const userCountry = await IPUtils.getCachedCountry();
                             
-                            console.log('🔍 Debug Country Rules:');
-                            console.log('Country Rules:', countryRules.country_rules);
-                            console.log('User IP:', userIP);
-                            console.log('User Country:', userCountry);
+                            // Log removed
+                            // Log removed
+                            // Log removed
+                            // Log removed
                             
                             sendResponse({ 
                                 success: true, 
@@ -2738,16 +2696,16 @@ function FindProxyForURL(url, host) {
                         
                     case 'debugRules':
                         try {
-                            console.log('🔍 Debug rules requested');
+                            // Log removed
                             const storage = await chrome.storage.local.get(['urls', 'allowed_ips', 'current_ip', 'cachedIP']);
                             const currentIP = storage.current_ip || storage.cachedIP;
                             
-                            console.log('📋 Debug rules data:');
-                            console.log('   URLs:', storage.urls);
-                            console.log('   Allowed IPs:', storage.allowed_ips);
-                            console.log('   Current IP:', currentIP);
-                            console.log('   Cached rules:', this._cachedRules);
-                            console.log('   Blocked domains:', Array.from(this._blockedDomains));
+                            // Log removed
+                            // Log removed
+                            // Log removed
+                            // Log removed
+                            // Log removed
+                            // Log removed
                             
                             sendResponse({ 
                                 success: true, 
@@ -2760,7 +2718,7 @@ function FindProxyForURL(url, host) {
                                 }
                             });
                         } catch (error) {
-                            console.error('❌ Error in debugRules:', error);
+                            // Error removed
                             sendResponse({ success: false, error: error.message });
                         }
                         break;
@@ -2775,11 +2733,11 @@ function FindProxyForURL(url, host) {
                         
                     case 'clearProxy':
                         try {
-                            console.log('🧹 Clearing proxy settings...');
+                            // Log removed
                             
                             // First, clear proxy settings
                             await chrome.proxy.settings.clear({});
-                            console.log('✅ Proxy settings cleared successfully');
+                            // Log removed
                             
                             // Wait a bit for settings to take effect
                             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -2791,30 +2749,30 @@ function FindProxyForURL(url, host) {
                                 },
                                 scope: 'regular'
                             });
-                            console.log('✅ Direct connection set');
+                            // Log removed
                             
                             // Wait a bit more
                             await new Promise(resolve => setTimeout(resolve, 1000));
                             
                             // Clear again to ensure it's really cleared
                             await chrome.proxy.settings.clear({});
-                            console.log('✅ Proxy settings cleared again');
+                            // Log removed
                             
                             // Wait for final clear to take effect
                             await new Promise(resolve => setTimeout(resolve, 1000));
                             
                             // Force refresh all tabs
                             const tabs = await chrome.tabs.query({});
-                            console.log(`🔄 Refreshing ${tabs.length} tabs...`);
+                            // Log removed
                             
                             for (const tab of tabs) {
                                 try {
                                     if (tab.url && tab.url.includes('binance.com')) {
-                                        console.log(`🔄 Refreshing binance tab: ${tab.id}`);
+                                        // Log removed
                                         await chrome.tabs.reload(tab.id);
                                     }
                                 } catch (e) {
-                                    console.log(`⚠️ Could not refresh tab ${tab.id}:`, e.message);
+                                    // Log removed
                                 }
                             }
                             
@@ -2823,27 +2781,27 @@ function FindProxyForURL(url, host) {
                                 const activeTabs = await chrome.tabs.query({active: true, currentWindow: true});
                                 if (activeTabs[0]) {
                                     await chrome.tabs.reload(activeTabs[0].id);
-                                    console.log('🔄 Refreshed active tab');
+                                    // Log removed
                                 }
                             } catch (e) {
-                                console.log('⚠️ Could not refresh active tab:', e.message);
+                                // Log removed
                             }
                             
                             sendResponse({ success: true });
                         } catch (error) {
-                            console.error('❌ Error clearing proxy:', error);
+                            // Error removed
                             sendResponse({ success: false, error: error.message });
                         }
                         break;
                         
                     case 'forceClearProxy':
                         try {
-                            console.log('💥 Force clearing proxy settings...');
+                            // Log removed
                             
                             // Multiple clear attempts
                             for (let i = 0; i < 3; i++) {
                                 await chrome.proxy.settings.clear({});
-                                console.log(`✅ Clear attempt ${i + 1}`);
+                                // Log removed
                                 await new Promise(resolve => setTimeout(resolve, 500));
                             }
                             
@@ -2853,17 +2811,17 @@ function FindProxyForURL(url, host) {
                                     value: { mode: 'direct' },
                                     scope: 'regular'
                                 });
-                                console.log(`✅ Direct connection attempt ${i + 1}`);
+                                // Log removed
                                 await new Promise(resolve => setTimeout(resolve, 500));
                             }
                             
                             // Final clear
                             await chrome.proxy.settings.clear({});
-                            console.log('✅ Final clear completed');
+                            // Log removed
                             
                             sendResponse({ success: true });
                         } catch (error) {
-                            console.error('❌ Error force clearing proxy:', error);
+                            // Error removed
                             sendResponse({ success: false, error: error.message });
                         }
                         break;
@@ -2873,13 +2831,13 @@ function FindProxyForURL(url, host) {
                             const { policy } = request;
                             if (chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy) {
                                 await chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: policy });
-                                console.log('🔒 WebRTC policy updated to:', policy);
+                                // Log removed
                                 sendResponse({ success: true });
                             } else {
                                 sendResponse({ success: false, error: 'WebRTC privacy API not available' });
                             }
                         } catch (error) {
-                            console.error('❌ Error updating WebRTC policy:', error);
+                            // Error removed
                             sendResponse({ success: false, error: error.message });
                         }
                         break;
@@ -2898,11 +2856,11 @@ function FindProxyForURL(url, host) {
                                         // Ignore if not attached
                                     }
                                 }
-                                console.log('🌍 Location spoofing disabled');
+                                // Log removed
                             } else {
                                 // Apply location spoofing
                                 await this.applyLocationSpoofing(timezone, locale, latitude, longitude);
-                                console.log('🌍 Location spoofing updated:', { timezone, locale, latitude, longitude });
+                                // Log removed
                                 
                                 // Store current timezone and locale for getTimezoneSettings
                                 await chrome.storage.local.set({
@@ -2910,12 +2868,12 @@ function FindProxyForURL(url, host) {
                                     current_locale: locale
                                 });
                                 
-                                console.log('🌍 Stored current timezone in updateLocationSpoofing:', timezone, 'locale:', locale);
+                                // Log removed
                             }
                             
                             sendResponse({ success: true });
                         } catch (error) {
-                            console.error('❌ Error updating location spoofing:', error);
+                            // Error removed
                             sendResponse({ success: false, error: error.message });
                         }
                         break;
@@ -2924,7 +2882,7 @@ function FindProxyForURL(url, host) {
                         try {
                             // Get all timezone data
                             const tzData = await chrome.storage.local.get(['location_config', 'timezone', 'locale', 'current_timezone', 'current_locale', 'current_ip', 'ip_country']);
-                            console.log('🌍 getTimezoneSettings data:', tzData);
+                            // Log removed
                             
                             const useIP = (tzData.location_config || 'matchIP') === 'matchIP';
                             let timezone, locale;
@@ -2933,17 +2891,17 @@ function FindProxyForURL(url, host) {
                                 // Use IP-based timezone
                                 timezone = tzData.current_timezone;
                                 locale = tzData.current_locale || 'en-US';
-                                console.log('🌍 Using IP-based timezone:', timezone);
+                                // Log removed
                             } else if (tzData.timezone) {
                                 // Use custom timezone
                                 timezone = tzData.timezone;
                                 locale = tzData.locale || 'en-US';
-                                console.log('🌍 Using custom timezone:', timezone);
+                                // Log removed
                             } else {
                                 // Use default timezone
                                 timezone = 'UTC';
                                 locale = 'en-US';
-                                console.log('🌍 Using default timezone (no IP data):', timezone);
+                                // Log removed
                             }
                             
                             // Calculate timezone offset from resolved timezone
@@ -2954,10 +2912,10 @@ function FindProxyForURL(url, host) {
                                 const spoofedTime = new Date(utc.toLocaleString('en-US', { timeZone: timezone }));
                                 timezoneOffset = Math.round((spoofedTime.getTime() - utc.getTime()) / 60000);
                             } catch (e) {
-                                console.log('❌ Error calculating timezone offset:', e);
+                                // Log removed
                             }
                             
-                            console.log('🌍 Sending timezone settings:', { timezone, locale, timezoneOffset });
+                            // Log removed
                             sendResponse({ success: true, timezone, locale, timezoneOffset });
                         } catch (error) {
                             await ErrorHandler.handle(error, 'getTimezoneSettings');
@@ -2969,7 +2927,7 @@ function FindProxyForURL(url, host) {
                         sendResponse({ success: false, error: 'Unknown message type' });
                 }
             } catch (error) {
-                console.error('❌ Error in handleMessage:', error);
+                // Error removed
                 await ErrorHandler.handle(error, 'handleMessage');
                 sendResponse({ success: false, error: error.message });
             }

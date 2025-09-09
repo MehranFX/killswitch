@@ -5,7 +5,7 @@
 (function() {
     'use strict';
     
-    console.log('🌍 SIMPLE Timezone: Starting simple timezone spoofing...');
+    // Log removed
     
     // Default timezone settings (will be overridden by background)
     let timezone = 'UTC'; // Neutral default
@@ -20,7 +20,7 @@
     
     // Function to apply simple timezone spoofing
     function applySimpleTimezoneSpoofing() {
-        console.log('🌍 Applying SIMPLE timezone spoofing:', timezone, 'offset:', timezoneOffset);
+        // Log removed
         
         try {
             // Store original Date constructor
@@ -177,7 +177,7 @@
                     });
                 }
             } catch (e) {
-                console.log('⚠️ Could not override createElement/contentWindow:', e);
+                // Log removed
             }
             
             // Override eval and Function constructor to prevent dynamic code execution
@@ -193,7 +193,7 @@
                     return originalEval.call(this, code);
                 };
             } catch (e) {
-                console.log('⚠️ Could not override eval:', e);
+                // Log removed
             }
             
             try {
@@ -210,13 +210,13 @@
                     return originalFunction.apply(this, args);
                 };
             } catch (e) {
-                console.log('⚠️ Could not override Function:', e);
+                // Log removed
             }
             
-            console.log('✅ SIMPLE timezone spoofing applied successfully');
+            // Log removed
             
         } catch (e) {
-            console.error('❌ Error applying SIMPLE timezone spoofing:', e);
+            // Error removed
         }
     }
     
@@ -240,15 +240,15 @@
                     locale = response.locale || 'en-US';
                     timezoneOffset = response.timezoneOffset || 0;
                     
-                    console.log('🌍 Received timezone settings from background (immediate):', { timezone, locale, timezoneOffset });
+                    // Log removed
                     applySimpleTimezoneSpoofing();
                 } else {
-                    console.log('🌍 No immediate timezone settings received');
+                    // Log removed
                 }
             });
         }
     } catch (e) {
-        console.log('⚠️ Could not access chrome runtime in MAIN world:', e);
+        // Log removed
     }
     
     // Get settings from background with retry mechanism
@@ -259,41 +259,41 @@
         try {
             if (typeof chrome !== 'undefined' && chrome.runtime) {
                 chrome.runtime.sendMessage({ type: 'getTimezoneSettings' }, (response) => {
-                    console.log('🌍 getTimezoneSettings response:', response);
+                    // Log removed
                     
                     if (response && response.success && response.timezone) {
                         timezone = response.timezone;
                         locale = response.locale || 'en-US';
                         timezoneOffset = response.timezoneOffset || 0;
                         
-                        console.log('🌍 Received timezone settings from background:', { timezone, locale, timezoneOffset });
+                        // Log removed
                         applySimpleTimezoneSpoofing();
                     } else {
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`🌍 No timezone settings received, retrying ${retryCount}/${maxRetries} in 100ms...`);
+                            // Log removed
                             setTimeout(getTimezoneSettings, 100);
                         } else {
-                            console.log('❌ Max retries reached, using default timezone');
+                            // Log removed
                         }
                     }
                 });
             } else {
                 retryCount++;
                 if (retryCount < maxRetries) {
-                    console.log(`⚠️ Chrome runtime not available, retrying ${retryCount}/${maxRetries} in 100ms...`);
+                    // Log removed
                     setTimeout(getTimezoneSettings, 100);
                 } else {
-                    console.log('❌ Max retries reached, Chrome runtime not available');
+                    // Log removed
                 }
             }
         } catch (e) {
             retryCount++;
             if (retryCount < maxRetries) {
-                console.log(`⚠️ Error getting timezone settings, retrying ${retryCount}/${maxRetries} in 100ms:`, e);
+                // Log removed
                 setTimeout(getTimezoneSettings, 100);
             } else {
-                console.log('❌ Max retries reached, error getting timezone settings:', e);
+                // Log removed
             }
         }
     }
@@ -307,7 +307,7 @@
             timezone = event.data.timezone || timezone;
             locale = event.data.locale || locale;
             timezoneOffset = event.data.timezoneOffset || timezoneOffset;
-            console.log('🌍 Received timezone update via postMessage:', { timezone, locale, timezoneOffset });
+            // Log removed
             applySimpleTimezoneSpoofing();
         }
     });
@@ -315,7 +315,7 @@
     // Also listen for storage changes via postMessage
     window.addEventListener('storage', function(event) {
         if (event.key === 'current_timezone' || event.key === 'current_locale') {
-            console.log('🌍 Storage changed, requesting timezone update...');
+            // Log removed
             // Request update from background
             if (typeof chrome !== 'undefined' && chrome.runtime) {
                 chrome.runtime.sendMessage({ type: 'getTimezoneSettings' }, (response) => {
@@ -323,7 +323,7 @@
                         timezone = response.timezone;
                         locale = response.locale || 'en-US';
                         timezoneOffset = response.timezoneOffset || 0;
-                        console.log('🌍 Updated timezone from storage change:', { timezone, locale, timezoneOffset });
+                        // Log removed
                         applySimpleTimezoneSpoofing();
                     }
                 });
@@ -337,17 +337,17 @@
             try {
                 if (newTimezone) { timezone = newTimezone; }
                 if (newLocale) { locale = newLocale; }
-                console.log('🌍 SIMPLE Timezone: live update received →', { timezone, locale });
+                // Log removed
                 // Re-apply overrides so any closures pick up the new values
                 applySimpleTimezoneSpoofing();
             } catch (e) {
-                console.warn('⚠️ SIMPLE Timezone: live update failed:', e);
+                // Warning removed
             }
         };
     } catch (e) {
-        console.warn('⚠️ SIMPLE Timezone: unable to expose update hook:', e);
+        // Warning removed
     }
     
-    console.log('🌍 SIMPLE Timezone: Ready');
+    // Log removed
     
 })();

@@ -5,14 +5,14 @@
 (function() {
     'use strict';
     
-    console.log('🌍 Timezone Inject: Starting injection...');
+    // Log removed
     
     // Get timezone from URL parameters or use default
     const urlParams = new URLSearchParams(window.location.search);
     const timezone = urlParams.get('tz') || 'UTC';
     const locale = urlParams.get('loc') || 'en-US';
     
-    console.log('🌍 Timezone Inject: Using timezone:', timezone, 'locale:', locale);
+    // Log removed
     
     // Apply timezone spoofing
     try {
@@ -57,10 +57,10 @@
             };
         }
         
-        console.log('✅ Timezone injection completed');
+        // Log removed
         
     } catch (e) {
-        console.error('❌ Error in timezone injection:', e);
+        // Error removed
     }
     
 })();

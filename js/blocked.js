@@ -29,14 +29,14 @@
     try {
       const params = new URLSearchParams(window.location.search);
       const fromParam = params.get('domain');
-      // console.log('🔍 URL params:', window.location.search);
-      // console.log('🔍 Domain from param:', fromParam);
-      // console.log('🔍 Current URL:', window.location.href);
+      // // Log removed
+      // // Log removed
+      // // Log removed
       
       if (fromParam) {
         const el = document.getElementById('blockedDomain');
         if (el) el.textContent = fromParam;
-        // console.log('✅ Using domain from URL param:', fromParam);
+        // // Log removed
         return;
       }
       
@@ -46,11 +46,11 @@
         if (sessionDomain) {
           const el = document.getElementById('blockedDomain');
           if (el) el.textContent = sessionDomain;
-          // console.log('✅ Using domain from sessionStorage:', sessionDomain);
+          // // Log removed
           return;
         }
       } catch (error) {
-        // console.log('❌ Error reading sessionStorage:', error);
+        // // Log removed
       }
       
       // Try to get domain from chrome.storage.session
@@ -59,23 +59,23 @@
         if (sessionData.current_blocked_domain) {
           const el = document.getElementById('blockedDomain');
           if (el) el.textContent = sessionData.current_blocked_domain;
-          // console.log('✅ Using domain from chrome.storage.session:', sessionData.current_blocked_domain);
+          // // Log removed
           return;
         }
       } catch (error) {
-        // console.log('❌ Error reading chrome.storage.session:', error);
+        // // Log removed
       }
       // Prefer per-tab captured URL
       try {
         // First try to get the current tab
         const tabs = await chrome.tabs.query({active: true, currentWindow: true});
         const tab = tabs && tabs[0];
-        // console.log('🔍 Active tab:', tab);
+        // // Log removed
         
         if (tab && typeof tab.id === 'number') {
           const key = `blockedUrl_${tab.id}`;
           const obj = await chrome.storage.local.get([key, 'last_blocked_domain']);
-          // console.log('🔍 Storage data for tab', tab.id, ':', obj);
+          // // Log removed
           const perTabUrl = obj[key];
           
           if (perTabUrl) {
@@ -84,52 +84,52 @@
               const host = u.hostname;
               const el = document.getElementById('blockedDomain');
               if (el) el.textContent = host;
-              // console.log('✅ Using domain from perTabUrl:', host);
+              // // Log removed
               return;
             } catch (error) {
-              // console.log('❌ Error parsing perTabUrl:', error);
+              // // Log removed
             }
           }
           
           if (obj.last_blocked_domain) {
             const el = document.getElementById('blockedDomain');
             if (el) el.textContent = obj.last_blocked_domain;
-            // console.log('✅ Using domain from last_blocked_domain:', obj.last_blocked_domain);
+            // // Log removed
             return;
           }
         } else {
-          // console.log('❌ No active tab found or invalid tab ID');
+          // // Log removed
         }
       } catch (error) {
-        // console.log('❌ Error in per-tab check:', error);
+        // // Log removed
         // Fallback: try to get domain from storage without tab query
         try {
           const obj = await chrome.storage.local.get(['last_blocked_domain']);
           if (obj.last_blocked_domain) {
             const el = document.getElementById('blockedDomain');
             if (el) el.textContent = obj.last_blocked_domain;
-            // console.log('✅ Using domain from last_blocked_domain (fallback):', obj.last_blocked_domain);
+            // // Log removed
             return;
           }
         } catch (fallbackError) {
-          // console.log('❌ Error in fallback check:', fallbackError);
+          // // Log removed
         }
       }
       const ref = document.referrer;
-      // console.log('🔍 Document referrer:', ref);
+      // // Log removed
       if (ref) {
         try {
           const url = new URL(ref);
           const el = document.getElementById('blockedDomain');
           if (el) el.textContent = url.hostname;
-          // console.log('✅ Using domain from referrer:', url.hostname);
+          // // Log removed
           return;
         } catch (error) {
-          // console.log('❌ Error in referrer check:', error);
+          // // Log removed
         }
       }
       const storage = await chrome.storage.local.get(null);
-      // console.log('🔍 All storage data:', storage);
+      // // Log removed
       let blockedUrl = null;
       let latestTabId = null;
       let latestTimestamp = 0;
@@ -144,12 +144,12 @@
           }
         }
       }
-      // console.log('🔍 Found latest blockedUrl:', blockedUrl, 'for tab:', latestTabId);
+      // // Log removed
       // Prefer explicit last_blocked_domain if present
       if (storage.last_blocked_domain) {
         const el = document.getElementById('blockedDomain');
         if (el) el.textContent = storage.last_blocked_domain;
-        // console.log('✅ Using domain from storage last_blocked_domain:', storage.last_blocked_domain);
+        // // Log removed
         return;
       }
       
@@ -159,14 +159,14 @@
           const u = new URL(blockedUrl);
           const el = document.getElementById('blockedDomain');
           if (el) el.textContent = u.hostname;
-          // console.log('✅ Using domain from blockedUrl:', u.hostname);
+          // // Log removed
           return;
         } catch (error) {
-          // console.log('❌ Error parsing blockedUrl:', error);
+          // // Log removed
           const m = blockedUrl.match(/(?:https?:\/\/)?(?:www\.)?([^\/\?]+)/);
           const el = document.getElementById('blockedDomain');
           if (el) el.textContent = (m && m[1]) ? m[1] : blockedUrl;
-          // console.log('✅ Using domain from blockedUrl (regex):', (m && m[1]) ? m[1] : blockedUrl);
+          // // Log removed
           return;
         }
       }
@@ -175,11 +175,11 @@
       const el = document.getElementById('blockedDomain');
       if (!el) return;
       el.textContent = 'Unknown domain';
-      // console.log('❌ No domain found, showing Unknown domain');
+      // // Log removed
     } catch (error) {
       const el = document.getElementById('blockedDomain');
       if (el) el.textContent = 'Error loading domain';
-      // console.log('❌ Error loading domain:', error);
+      // // Log removed
     }
   }
 

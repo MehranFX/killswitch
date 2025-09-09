@@ -5,10 +5,10 @@
 (function() {
     'use strict';
     
-    console.log('🛡️ Timezone Protection: Starting...');
+    // Log removed
     
     function initializeProtection() {
-        console.log('🛡️ Timezone Protection: Initializing...');
+        // Log removed
         
         // Send message to early script immediately
         window.postMessage({
@@ -21,7 +21,7 @@
         // Get settings from storage with retry mechanism
         function getSettings() {
             chrome.storage.local.get(['timezone', 'locale', 'latitude', 'longitude', 'location_config', 'current_timezone', 'current_locale'], (result) => {
-                console.log('🛡️ Storage data:', result);
+                // Log removed
                 
                 let timezone, locale, latitude, longitude;
                 
@@ -31,20 +31,20 @@
                     locale = result.current_locale || 'en-US';
                     latitude = result.latitude || '0';
                     longitude = result.longitude || '0';
-                    console.log('🌍 Using IP-based timezone from storage:', timezone);
+                    // Log removed
                 } else if (result.timezone) {
                     timezone = result.timezone;
                     locale = result.locale || 'en-US';
                     latitude = result.latitude || '0';
                     longitude = result.longitude || '0';
-                    console.log('🌍 Using custom timezone from storage:', timezone);
+                    // Log removed
                 } else {
-                    console.log('🌍 No timezone settings found, retrying in 200ms...');
+                    // Log removed
                     setTimeout(getSettings, 200);
                     return;
                 }
                 
-                console.log('🌍 Timezone protection settings:', { timezone, locale, latitude, longitude });
+                // Log removed
                 
                 // Calculate timezone offset
                 const now = new Date();
@@ -72,7 +72,7 @@
         // Listen for storage changes
         chrome.storage.onChanged.addListener((changes, namespace) => {
             if (namespace === 'local' && (changes.timezone || changes.locale || changes.latitude || changes.longitude || changes.current_timezone || changes.current_locale)) {
-                console.log('🔄 Timezone settings changed, reapplying spoofing...');
+                // Log removed
                 chrome.storage.local.get(['timezone', 'locale', 'latitude', 'longitude', 'location_config', 'current_timezone', 'current_locale'], (result) => {
                     let timezone, locale, latitude, longitude;
                     
@@ -82,13 +82,13 @@
                         locale = result.current_locale || 'en-US';
                         latitude = result.latitude || '0';
                         longitude = result.longitude || '0';
-                        console.log('🌍 Using IP-based timezone from storage (update):', timezone);
+                        // Log removed
                     } else {
                         timezone = result.timezone || 'UTC';
                         locale = result.locale || 'en-US';
                         latitude = result.latitude || '0';
                         longitude = result.longitude || '0';
-                        console.log('🌍 Using custom timezone from storage (update):', timezone);
+                        // Log removed
                     }
                     
                     // Calculate timezone offset
@@ -121,6 +121,6 @@
         initializeProtection();
     }
     
-    console.log('🛡️ Timezone Protection: Ready');
+    // Log removed
     
 })();

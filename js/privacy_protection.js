@@ -101,14 +101,14 @@
             });
         }
         
-        console.log('🛡️ Direct privacy spoofing applied');
+        // Log removed
         
     } catch (e) {
-        console.log('⚠️ Direct spoofing failed:', e);
+        // Log removed
     }
     
     function initializePrivacyProtection(settings) {
-        console.log('🛡️ Privacy Protection: Initializing...');
+        // Log removed
         
         // Check each setting and apply protection accordingly
         if (settings.canvas_protection) protectCanvasFingerprinting();
@@ -132,7 +132,7 @@
         if (settings.timing_protection) enhanceTimingProtection();
         if (settings.flash_protection) blockFlash();
         
-        console.log('✅ Privacy Protection: Initialized successfully');
+        // Log removed
     }
 
     function blockHyperlinkAuditing() {
@@ -158,9 +158,9 @@
                 }
             }, true);
 
-            console.log('🛡️ Hyperlink auditing (ping) blocked');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not block hyperlink auditing:', e.message);
+            // Log removed
         }
     }
     
@@ -206,9 +206,9 @@
                 }
             }
             
-            console.log('🛡️ Enhanced Canvas fingerprinting protected');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not protect canvas fingerprinting:', e.message);
+            // Log removed
         }
     }
     
@@ -265,9 +265,9 @@
             overrideContext(window.WebGLRenderingContext);
             overrideContext(window.WebGL2RenderingContext);
 
-            console.log('🛡️ Enhanced WebGL fingerprinting protected');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not protect WebGL fingerprinting:', e.message);
+            // Log removed
         }
     }
     
@@ -324,9 +324,9 @@
                 }
             }
             
-            console.log('🛡️ Enhanced Audio fingerprinting protected');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not protect audio fingerprinting:', e.message);
+            // Log removed
         }
     }
     
@@ -392,9 +392,9 @@
                 return style;
             };
             
-            console.log('🛡️ Enhanced Font fingerprinting protected');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not protect font fingerprinting:', e.message);
+            // Log removed
         }
     }
     
@@ -406,9 +406,9 @@
             Object.defineProperty(screen, 'availHeight', { value: 1040, writable: false });
             Object.defineProperty(screen, 'colorDepth', { value: 24, writable: false });
             Object.defineProperty(screen, 'pixelDepth', { value: 24, writable: false });
-            console.log('🛡️ Screen resolution spoofed');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not spoof screen resolution:', e.message);
+            // Log removed
         }
     }
     
@@ -424,9 +424,9 @@
                     });
                 };
             }
-            console.log('🛡️ Battery API protected');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not protect Battery API:', e.message);
+            // Log removed
         }
     }
     
@@ -439,9 +439,9 @@
                     configurable: false
                 });
             }
-            console.log('🛡️ Device memory spoofed');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not spoof device memory:', e.message);
+            // Log removed
         }
     }
     
@@ -452,9 +452,9 @@
                 writable: false,
                 configurable: false
             });
-            console.log('🛡️ Hardware concurrency spoofed');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not spoof hardware concurrency:', e.message);
+            // Log removed
         }
     }
     
@@ -475,9 +475,9 @@
                 writable: false,
                 configurable: false
             });
-            console.log('🛡️ Language and platform spoofed');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not spoof language and platform:', e.message);
+            // Log removed
         }
     }
     
@@ -488,9 +488,9 @@
                 writable: false,
                 configurable: false
             });
-            console.log('🛡️ Do Not Track enabled');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not enable Do Not Track:', e.message);
+            // Log removed
         }
     }
     
@@ -527,9 +527,9 @@
                 return element;
             };
             
-            console.log('🛡️ Enhanced Referrer policy controlled');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not control referrer policy:', e.message);
+            // Log removed
         }
     }
     
@@ -540,9 +540,9 @@
                 localStorage.removeItem(key);
                 sessionStorage.removeItem(key);
             });
-            console.log('🛡️ Local storage protected');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not protect local storage:', e.message);
+            // Log removed
         }
     }
     
@@ -550,9 +550,9 @@
         try {
             // Set secure cookie attributes
             document.cookie = 'SameSite=Strict; Secure; HttpOnly';
-            console.log('🛡️ Cookies protected');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not protect cookies:', e.message);
+            // Log removed
         }
     }
     
@@ -564,16 +564,15 @@
                 const scripts = document.querySelectorAll('script');
                 scripts.forEach(script => {
                     if (script.src && (script.src.includes('ip') || script.src.includes('location'))) {
-                        console.warn('🚨 Potential IP leak detected:', script.src);
+                        // IP leak detected - silent monitoring
                     }
                 });
             };
             
             // Check periodically
             setInterval(checkForIPLeaks, 5000);
-            console.log('🛡️ IP leak detection enabled');
         } catch (e) {
-            console.log('⚠️ Could not enable IP leak detection:', e.message);
+            // IP leak detection failed silently
         }
     }
     
@@ -592,9 +591,9 @@
                 writable: false,
                 configurable: false
             });
-            console.log('🛡️ Fingerprint randomized');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not randomize fingerprint:', e.message);
+            // Log removed
         }
     }
     
@@ -614,9 +613,9 @@
                     writable: false 
                 });
             }
-            console.log('🛡️ Network information spoofed');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not spoof network information:', e.message);
+            // Log removed
         }
     }
     
@@ -630,9 +629,9 @@
                     ]);
                 };
             }
-            console.log('🛡️ Media devices spoofed');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not spoof media devices:', e.message);
+            // Log removed
         }
     }
     
@@ -657,9 +656,9 @@
             Date.parse = originalDate.parse;
             Date.UTC = originalDate.UTC;
             
-            console.log('🛡️ Timing protection enhanced');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not enhance timing protection:', e.message);
+            // Log removed
         }
     }
     
@@ -705,9 +704,9 @@
                 return originalCreateElement.apply(this, arguments);
             };
             
-            console.log('🛡️ Flash blocked');
+            // Log removed
         } catch (e) {
-            console.log('⚠️ Could not block Flash:', e.message);
+            // Log removed
         }
     }
     
