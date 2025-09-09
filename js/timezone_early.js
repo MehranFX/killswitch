@@ -30,10 +30,15 @@
             window.Date = function(...args) {
                 if (args.length === 0) {
                     // new Date() - return current time in spoofed timezone
-                    const now = new OriginalDate();
-                    const utc = new OriginalDate(now.getTime() + (now.getTimezoneOffset() * 60000));
-                    const spoofedTime = new OriginalDate(utc.toLocaleString('en-US', { timeZone: timezone }));
-                    return spoofedTime;
+                    try {
+                        const now = new OriginalDate();
+                        const utc = new OriginalDate(now.getTime() + (now.getTimezoneOffset() * 60000));
+                        const spoofedTime = new OriginalDate(utc.toLocaleString('en-US', { timeZone: timezone }));
+                        return spoofedTime;
+                    } catch (e) {
+                        // Fallback to original Date if timezone conversion fails
+                        return new OriginalDate();
+                    }
                 } else {
                     return new OriginalDate(...args);
                 }
@@ -41,10 +46,15 @@
             
             // Copy static methods
             window.Date.now = function() {
-                const now = new OriginalDate();
-                const utc = new OriginalDate(now.getTime() + (now.getTimezoneOffset() * 60000));
-                const spoofedTime = new OriginalDate(utc.toLocaleString('en-US', { timeZone: timezone }));
-                return spoofedTime.getTime();
+                try {
+                    const now = new OriginalDate();
+                    const utc = new OriginalDate(now.getTime() + (now.getTimezoneOffset() * 60000));
+                    const spoofedTime = new OriginalDate(utc.toLocaleString('en-US', { timeZone: timezone }));
+                    return spoofedTime.getTime();
+                } catch (e) {
+                    // Fallback to original Date.now if timezone conversion fails
+                    return OriginalDate.now();
+                }
             };
             
             window.Date.parse = OriginalDate.parse;
@@ -57,8 +67,9 @@
                     const utcRef = new OriginalDate(nowLocal.getTime() + (nowLocal.getTimezoneOffset() * 60000));
                     const spoofedRef = new OriginalDate(utcRef.toLocaleString('en-US', { timeZone: timezone }));
                     return Math.round((spoofedRef.getTime() - utcRef.getTime()) / 60000);
-                } catch (_) {
-                    return timezoneOffset; // fallback
+                } catch (e) {
+                    // Fallback to timezoneOffset if timezone conversion fails
+                    return timezoneOffset;
                 }
             }
 

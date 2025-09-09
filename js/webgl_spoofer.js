@@ -4,12 +4,15 @@
   if (window.__ksWebglSpoofApplied) return;
   window.__ksWebglSpoofApplied = true;
 
-  // Hide only INVALID_ENUM noise
+  // Hide WebGL INVALID_ENUM noise and timezone-related errors
   try{
     const origError = console.error.bind(console);
     console.error = function(){
       const msg = arguments[0] && String(arguments[0]);
+      // Hide WebGL INVALID_ENUM errors
       if (msg && msg.includes('WebGL: INVALID_ENUM') && msg.includes('getParameter')) return;
+      // Hide timezone-related "Unimplemented type" errors
+      if (msg && msg.includes('Unimplemented type: 3')) return;
       return origError.apply(console, arguments);
     };
   }catch(_e){}
@@ -131,8 +134,28 @@
     // Final override: never call original getParameter (prevents INVALID_ENUM)
     gl.getParameter = function(pname){
       if (typeof pname === 'number' && pname in fake) return fake[pname];
-      // safe default for unknown enums to avoid errors and keep fields non-empty
-      return 0;
+      
+      // Handle common WebGL parameters that might cause "Unimplemented type" errors
+      try {
+        // For unknown parameters, try to return a safe default based on parameter type
+        if (typeof pname === 'number') {
+          // Common WebGL parameter ranges and their expected return types
+          if (pname >= 0x0B00 && pname <= 0x0BFF) {
+            return false; // Boolean parameters
+          } else if (pname >= 0x0C00 && pname <= 0x0CFF) {
+            return 0; // Integer parameters
+          } else if (pname >= 0x0D00 && pname <= 0x0DFF) {
+            return 0; // Integer parameters
+          } else if (pname >= 0x1F00 && pname <= 0x1FFF) {
+            return ''; // String parameters
+          } else if (pname >= 0x8B00 && pname <= 0x8BFF) {
+            return 0; // Integer parameters
+          }
+        }
+        return 0;
+      } catch (e) {
+        return 0;
+      }
     };
 
     // Remove debug extension to block real unmasked values
