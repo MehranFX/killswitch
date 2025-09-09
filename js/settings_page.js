@@ -2,7 +2,14 @@
 
 (function(){
   async function loadSettings(){
-    const data = await chrome.storage.local.get(['fallback_proxy','webrtc_policy','location_config','timezone','locale','latitude','longitude','privacy_protection']);
+    const data = await chrome.storage.local.get([
+      'fallback_proxy','webrtc_policy','location_config','timezone','locale','latitude','longitude',
+      'canvas_protection','webgl_protection','audio_protection','font_protection','screen_spoofing',
+      'battery_protection','memory_spoofing','hardware_spoofing','language_spoofing','dnt_header',
+      'referrer_control','storage_protection','cookie_protection','block_ping',
+      'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection'
+    ]);
+    
     const input = document.getElementById('fallback_proxy');
     if(input){ input.value = data.fallback_proxy || '' }
     const webrtc = document.getElementById('webrtc_policy');
@@ -23,9 +30,18 @@
     const longitude = document.getElementById('longitude');
     if(longitude){ longitude.value = data.longitude || '' }
     
-    // Privacy protection setting
-    const privacyProtection = document.getElementById('privacy_protection');
-    if(privacyProtection){ privacyProtection.checked = !!data.privacy_protection }
+    // Privacy protection settings
+    const privacySettings = [
+      'canvas_protection','webgl_protection','audio_protection','font_protection','screen_spoofing',
+      'battery_protection','memory_spoofing','hardware_spoofing','language_spoofing','dnt_header',
+      'referrer_control','storage_protection','cookie_protection','block_ping',
+      'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection'
+    ];
+    
+    privacySettings.forEach(setting => {
+      const element = document.getElementById(setting);
+      if(element){ element.checked = data[setting] !== false } // Default to true unless explicitly false
+    });
   }
 
   function toggleCustomFields(config) {
@@ -129,9 +145,19 @@
       }
     }
     
-    // Privacy protection setting
-    const privacyProtection = document.getElementById('privacy_protection');
-    const protectionEnabled = privacyProtection ? privacyProtection.checked : false;
+    // Privacy protection settings
+    const privacySettings = [
+      'canvas_protection','webgl_protection','audio_protection','font_protection','screen_spoofing',
+      'battery_protection','memory_spoofing','hardware_spoofing','language_spoofing','dnt_header',
+      'referrer_control','storage_protection','cookie_protection',
+      'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection'
+    ];
+    
+    const privacyData = {};
+    privacySettings.forEach(setting => {
+      const element = document.getElementById(setting);
+      privacyData[setting] = element ? element.checked : false;
+    });
     
     await chrome.storage.local.set({ 
       fallback_proxy: value, 
@@ -141,7 +167,7 @@
       locale: locale,
       latitude: latitude,
       longitude: longitude,
-      privacy_protection: protectionEnabled
+      ...privacyData
     });
     
     // Apply WebRTC policy immediately via background script

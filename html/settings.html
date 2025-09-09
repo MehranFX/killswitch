@@ -68,13 +68,171 @@
       
       <div class="rule-item" style="text-align:left;">
         <p>
-          <strong>Advanced Privacy Protection</strong><br>
-          <label style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-            <input type="checkbox" id="privacy_protection" />
-            <span>Enable comprehensive privacy protection</span>
-          </label>
-          <small>Protects against fingerprinting, tracking, and data leaks. Includes canvas, WebGL, audio, font, screen, battery, and network spoofing.</small>
+          <strong>🛡️ Advanced Privacy Protection</strong><br>
+          <small>Protect against various tracking and fingerprinting methods</small>
         </p>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="canvas_protection" checked />
+          <span><strong>Canvas Fingerprinting Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Add noise to canvas data to prevent fingerprinting</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="webgl_protection" checked />
+          <span><strong>WebGL Fingerprinting Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Spoof GPU parameters to prevent identification</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="audio_protection" checked />
+          <span><strong>Audio Context Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Add noise to audio frequency data</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="font_protection" checked />
+          <span><strong>Font Fingerprinting Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Randomize font measurements</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="screen_spoofing" checked />
+          <span><strong>Screen Resolution Spoofing</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Standardize screen properties</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="battery_protection" checked />
+          <span><strong>Battery API Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Spoof battery information</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="memory_spoofing" checked />
+          <span><strong>Device Memory Spoofing</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Hide real memory amount</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="hardware_spoofing" checked />
+          <span><strong>Hardware Concurrency Spoofing</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Standardize CPU cores count</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="language_spoofing" checked />
+          <span><strong>Language/Platform Spoofing</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Spoof browser language and platform</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="dnt_header" checked />
+          <span><strong>Do Not Track Header</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Force DNT header enabled</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="referrer_control" checked />
+          <span><strong>Referrer Policy Control</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Block referrer leaks</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="block_ping" checked />
+          <span><strong>Block Hyperlink Auditing (ping)</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Block "ping" requests generated by link clicks</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="storage_protection" checked />
+          <span><strong>Local Storage Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Clear tracking data from storage</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="cookie_protection" checked />
+          <span><strong>Cookie Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Set secure cookie attributes</small>
+      </div>
+      
+      
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="ip_leak_detection" checked />
+          <span><strong>IP Leak Detection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Detect IP leak attempts</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="fingerprint_randomization" checked />
+          <span><strong>Fingerprint Randomization</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Randomize user agent and properties</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="network_spoofing" checked />
+          <span><strong>Network Information Spoofing</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Spoof connection data</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="media_spoofing" checked />
+          <span><strong>Media Devices Spoofing</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Spoof device enumeration</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="timing_protection" checked />
+          <span><strong>Advanced Timing Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Add timing variations to prevent analysis</small>
+      </div>
+      
+      <div class="rule-item" style="text-align:left; padding: 6px; background: #f8f9fa; border-radius: 4px; margin: 3px 0;">
+        <label style="display:flex; align-items:center; gap:6px; margin: 2px 0;">
+          <input type="checkbox" id="flash_protection" checked />
+          <span><strong>Flash Protection</strong></span>
+        </label>
+        <small style="margin-left: 20px; color: #666; font-size: 12px;">Block Flash detection and plugins</small>
       </div>
       
       <div align="center">

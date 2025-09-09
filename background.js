@@ -770,6 +770,12 @@ class BackgroundManager {
                     );
                     console.log('🌍 Location spoofing updated for new IP:', ipLocation);
                     
+                    // Store IP-based timezone and locale for getTimezoneSettings
+                    await chrome.storage.local.set({
+                        current_timezone: ipLocation.timezone,
+                        current_locale: ipLocation.locale
+                    });
+                    
                     // Notify popup to update display
                     try {
                         const tabs = await chrome.tabs.query({});
@@ -944,6 +950,12 @@ class BackgroundManager {
                         locale = ipLocation.locale;
                         latitude = ipLocation.latitude;
                         longitude = ipLocation.longitude;
+                        
+                        // Store IP-based timezone and locale for getTimezoneSettings
+                        await chrome.storage.local.set({
+                            current_timezone: ipLocation.timezone,
+                            current_locale: ipLocation.locale
+                        });
                     }
                 }
                 
@@ -1047,6 +1059,21 @@ class BackgroundManager {
         try {
             if (!timezone && !locale && !latitude && !longitude) return;
             
+            // Get tab info first to check if it's a valid target
+            const tab = await chrome.tabs.get(tabId);
+            if (!tab || !tab.url) return;
+            
+            // Skip chrome:// URLs and extension URLs
+            if (tab.url.startsWith('chrome://') || 
+                tab.url.startsWith('chrome-extension://') ||
+                tab.url.startsWith('moz-extension://') ||
+                tab.url.startsWith('edge-extension://') ||
+                tab.url.startsWith('about:') ||
+                tab.url.startsWith('file://')) {
+                console.log('⏭️ Skipping debugger for system URL:', tab.url);
+                return;
+            }
+            
             await chrome.debugger.attach({ tabId: tabId }, '1.3');
             
             if (timezone) {
@@ -1079,11 +1106,15 @@ class BackgroundManager {
             
             console.log('🌍 Location spoofing applied to tab:', tabId);
         } catch (error) {
-            if (error.message && error.message.includes('Another debugger is already attached')) {
-                // Tab already has debugger attached, ignore
+            if (error.message && (
+                error.message.includes('Another debugger is already attached') ||
+                error.message.includes('Cannot access a chrome:// URL') ||
+                error.message.includes('Cannot attach to this target')
+            )) {
+                // Expected errors, ignore silently
                 return;
             }
-            console.error('❌ Error attaching debugger to tab:', tabId, error);
+            console.warn('⚠️ Could not attach debugger to tab:', tabId, error.message);
         }
     }
 
@@ -2674,6 +2705,49 @@ function FindProxyForURL(url, host) {
                             sendResponse({ success: true });
                         } catch (error) {
                             console.error('❌ Error updating location spoofing:', error);
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'getTimezoneSettings':
+                        try {
+                            // Get all timezone data
+                            const tzData = await chrome.storage.local.get(['location_config', 'timezone', 'locale', 'current_timezone', 'current_locale', 'current_ip', 'ip_country']);
+                            console.log('🌍 getTimezoneSettings data:', tzData);
+                            
+                            const useIP = (tzData.location_config || 'matchIP') === 'matchIP';
+                            let timezone, locale;
+                            
+                            if (useIP && tzData.current_timezone) {
+                                // Use IP-based timezone
+                                timezone = tzData.current_timezone;
+                                locale = tzData.current_locale || 'en-US';
+                                console.log('🌍 Using IP-based timezone:', timezone);
+                            } else if (tzData.timezone) {
+                                // Use custom timezone
+                                timezone = tzData.timezone;
+                                locale = tzData.locale || 'en-US';
+                                console.log('🌍 Using custom timezone:', timezone);
+                            } else {
+                                // Use default timezone
+                                timezone = 'America/Toronto';
+                                locale = 'en-CA';
+                                console.log('🌍 Using default timezone:', timezone);
+                            }
+                            
+                            // Calculate timezone offset from resolved timezone
+                            let timezoneOffset = -300;
+                            try {
+                                const now = new Date();
+                                const utc = new Date(now.getTime() + (now.getTimezoneOffset() * 60000));
+                                const spoofedTime = new Date(utc.toLocaleString('en-US', { timeZone: timezone }));
+                                timezoneOffset = Math.round((spoofedTime.getTime() - utc.getTime()) / 60000);
+                            } catch {}
+                            
+                            console.log('🌍 Sending timezone settings:', { timezone, locale, timezoneOffset });
+                            sendResponse({ success: true, timezone, locale, timezoneOffset });
+                        } catch (error) {
+                            await ErrorHandler.handle(error, 'getTimezoneSettings');
                             sendResponse({ success: false, error: error.message });
                         }
                         break;

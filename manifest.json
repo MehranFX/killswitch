@@ -30,20 +30,34 @@
 	"host_permissions": [
 		"<all_urls>"
 	],
-	"content_scripts": [
-		{
-			"matches": ["<all_urls>"],
-			"js": ["js/timezone_protection.js"],
-			"run_at": "document_start",
-			"all_frames": true
-		},
-		{
-			"matches": ["<all_urls>"],
-			"js": ["js/privacy_protection.js"],
-			"run_at": "document_start",
-			"all_frames": true
-		}
-	],
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["js/webgl_force_enable.js"],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "MAIN"
+        },
+        {
+            "matches": ["<all_urls>"],
+            "js": ["js/timezone_early.js"],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "MAIN"
+        },
+        {
+            "matches": ["<all_urls>"],
+            "js": ["js/timezone_protection.js"],
+            "run_at": "document_start",
+            "all_frames": true
+        },
+        {
+            "matches": ["<all_urls>"],
+            "js": ["js/privacy_protection.js"],
+            "run_at": "document_start",
+            "all_frames": true
+        }
+    ],
 	"options_ui": {
 		"page": "/html/options.html",
 		"open_in_tab": false
@@ -53,6 +67,8 @@
 			"resources": [
 				"html/blocked.html",
 				"js/blocked.js",
+				"js/webgl_inject.js",
+				"js/timezone_inject.js",
 				"img/icon-48x48-red.png",
 				"img/icon-128x128-red.png"
 			],
