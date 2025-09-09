@@ -8,9 +8,9 @@
     console.log('🌍 SIMPLE Timezone: Starting simple timezone spoofing...');
     
     // Default timezone settings (will be overridden by background)
-    let timezone = 'America/Toronto'; // Default to Canada timezone
-    let locale = 'en-CA';
-    let timezoneOffset = -300; // Default EST offset in minutes
+    let timezone = 'UTC'; // Neutral default
+    let locale = 'en-US';
+    let timezoneOffset = 0; // UTC offset
     
     // Prevent double patching
     if (window.__ks_simple_timezone_patched__) {
@@ -50,15 +50,31 @@
             window.Date.parse = OriginalDate.parse;
             window.Date.UTC = OriginalDate.UTC;
             
-            // Override getTimezoneOffset
+            // Compute offset for arbitrary timestamps in spoofed timezone (DST-aware)
+            function computeOffsetForTime(timeInMs) {
+                try {
+                    const nowLocal = new OriginalDate(timeInMs);
+                    const utcRef = new OriginalDate(nowLocal.getTime() + (nowLocal.getTimezoneOffset() * 60000));
+                    const spoofedRef = new OriginalDate(utcRef.toLocaleString('en-US', { timeZone: timezone }));
+                    return Math.round((spoofedRef.getTime() - utcRef.getTime()) / 60000);
+                } catch (_) {
+                    return timezoneOffset; // fallback
+                }
+            }
+
+            // Override getTimezoneOffset (DST-aware per-instance)
             window.Date.prototype.getTimezoneOffset = function() {
-                return -timezoneOffset;
+                return -computeOffsetForTime(OriginalDate.prototype.getTime.call(this));
             };
             
             // Override toString methods
             window.Date.prototype.toString = function() {
+                const currentOffset = computeOffsetForTime(OriginalDate.prototype.getTime.call(this));
                 const str = OriginalDate.prototype.toString.call(this);
-                return str.replace(/GMT[+-]\d{4}/, `GMT${timezoneOffset >= 0 ? '+' : ''}${Math.floor(timezoneOffset/60).toString().padStart(2,'0')}${(timezoneOffset%60).toString().padStart(2,'0')}`);
+                const sign = currentOffset >= 0 ? '+' : '';
+                const hh = Math.floor(currentOffset/60).toString().padStart(2,'0');
+                const mm = Math.abs(currentOffset%60).toString().padStart(2,'0');
+                return str.replace(/GMT[+-]\d{4}/, `GMT${sign}${hh}${mm}`);
             };
             
             // Simple Intl.DateTimeFormat override
@@ -73,6 +89,19 @@
                 if (OriginalDateTimeFormat.supportedLocalesOf) {
                     window.Intl.DateTimeFormat.supportedLocalesOf = OriginalDateTimeFormat.supportedLocalesOf;
                 }
+                
+                // Ensure resolvedOptions reports our timezone
+                try {
+                    const proto = OriginalDateTimeFormat.prototype;
+                    if (proto && proto.resolvedOptions) {
+                        const originalResolved = proto.resolvedOptions;
+                        proto.resolvedOptions = function() {
+                            const r = originalResolved.call(this) || {};
+                            r.timeZone = timezone;
+                            return r;
+                        };
+                    }
+                } catch (_) {}
             }
             
             // Override navigator properties
@@ -90,6 +119,100 @@
                 });
             } catch {}
             
+            // Override iframe contentWindow to prevent sandbox attacks
+            try {
+                // 1) Patch future iframes created via createElement
+                const originalCreateElement = document.createElement;
+                document.createElement = function(tagName) {
+                    const element = originalCreateElement.call(this, tagName);
+                    if (tagName.toLowerCase() === 'iframe') {
+                        const originalContentWindow = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+                        if (originalContentWindow) {
+                            Object.defineProperty(element, 'contentWindow', {
+                                get: function() {
+                                    const win = originalContentWindow.get.call(this);
+                                    try {
+                                        if (win && win.Date) {
+                                            win.Date = window.Date;
+                                            win.Date.now = window.Date.now;
+                                            win.Date.parse = window.Date.parse;
+                                            win.Date.UTC = window.Date.UTC;
+                                            win.Date.prototype = window.Date.prototype;
+                                            if (win.Intl && win.Intl.DateTimeFormat) {
+                                                // Ensure Intl shares the spoofed behavior
+                                                win.Intl.DateTimeFormat = window.Intl.DateTimeFormat;
+                                            }
+                                        }
+                                    } catch (_) {}
+                                    return win;
+                                },
+                                configurable: true
+                            });
+                        }
+                    }
+                    return element;
+                };
+
+                // 2) Also patch the prototype getter so even existing iframes get fixed on access
+                const protoCW = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+                if (protoCW && protoCW.configurable && typeof protoCW.get === 'function') {
+                    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+                        get: function() {
+                            const win = protoCW.get.call(this);
+                            try {
+                                if (win && win.Date) {
+                                    win.Date = window.Date;
+                                    win.Date.now = window.Date.now;
+                                    win.Date.parse = window.Date.parse;
+                                    win.Date.UTC = window.Date.UTC;
+                                    win.Date.prototype = window.Date.prototype;
+                                    if (win.Intl && win.Intl.DateTimeFormat) {
+                                        win.Intl.DateTimeFormat = window.Intl.DateTimeFormat;
+                                    }
+                                }
+                            } catch (_) {}
+                            return win;
+                        },
+                        configurable: true
+                    });
+                }
+            } catch (e) {
+                console.log('⚠️ Could not override createElement/contentWindow:', e);
+            }
+            
+            // Override eval and Function constructor to prevent dynamic code execution
+            try {
+                const originalEval = window.eval;
+                window.eval = function(code) {
+                    // Replace timezone-related code with spoofed values
+                    if (typeof code === 'string') {
+                        code = code.replace(/new\s+Date\(\)/g, 'new Date()');
+                        code = code.replace(/Date\.now\(\)/g, 'Date.now()');
+                        code = code.replace(/\.getTimezoneOffset\(\)/g, '.getTimezoneOffset()');
+                    }
+                    return originalEval.call(this, code);
+                };
+            } catch (e) {
+                console.log('⚠️ Could not override eval:', e);
+            }
+            
+            try {
+                const originalFunction = window.Function;
+                window.Function = function(...args) {
+                    const code = args[args.length - 1];
+                    if (typeof code === 'string') {
+                        // Replace timezone-related code with spoofed values
+                        const modifiedCode = code.replace(/new\s+Date\(\)/g, 'new Date()')
+                                               .replace(/Date\.now\(\)/g, 'Date.now()')
+                                               .replace(/\.getTimezoneOffset\(\)/g, '.getTimezoneOffset()');
+                        args[args.length - 1] = modifiedCode;
+                    }
+                    return originalFunction.apply(this, args);
+                };
+            } catch (e) {
+                console.log('⚠️ Could not override Function:', e);
+            }
+            
             console.log('✅ SIMPLE timezone spoofing applied successfully');
             
         } catch (e) {
@@ -97,28 +220,86 @@
         }
     }
     
-    // Apply spoofing immediately
+    // Apply spoofing immediately (use boot values if present)
+    try {
+        if (window.__ks_boot_tz__) {
+            timezone = window.__ks_boot_tz__;
+        }
+        if (window.__ks_boot_locale__) {
+            locale = window.__ks_boot_locale__;
+        }
+    } catch (_) {}
     applySimpleTimezoneSpoofing();
     
-    // Get settings from background
+    // Try to get from background script immediately
     try {
         if (typeof chrome !== 'undefined' && chrome.runtime) {
             chrome.runtime.sendMessage({ type: 'getTimezoneSettings' }, (response) => {
-                if (response && response.timezone) {
+                if (response && response.success && response.timezone) {
                     timezone = response.timezone;
                     locale = response.locale || 'en-US';
-                    timezoneOffset = response.timezoneOffset || -300;
+                    timezoneOffset = response.timezoneOffset || 0;
                     
-                    console.log('🌍 Received timezone settings from background:', { timezone, locale, timezoneOffset });
+                    console.log('🌍 Received timezone settings from background (immediate):', { timezone, locale, timezoneOffset });
                     applySimpleTimezoneSpoofing();
                 } else {
-                    console.log('🌍 No timezone settings received, using defaults');
+                    console.log('🌍 No immediate timezone settings received');
                 }
             });
         }
     } catch (e) {
-        console.log('⚠️ Could not access chrome runtime:', e);
+        console.log('⚠️ Could not access chrome runtime in MAIN world:', e);
     }
+    
+    // Get settings from background with retry mechanism
+    let retryCount = 0;
+    const maxRetries = 50; // 5 seconds max
+    
+    function getTimezoneSettings() {
+        try {
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                chrome.runtime.sendMessage({ type: 'getTimezoneSettings' }, (response) => {
+                    console.log('🌍 getTimezoneSettings response:', response);
+                    
+                    if (response && response.success && response.timezone) {
+                        timezone = response.timezone;
+                        locale = response.locale || 'en-US';
+                        timezoneOffset = response.timezoneOffset || 0;
+                        
+                        console.log('🌍 Received timezone settings from background:', { timezone, locale, timezoneOffset });
+                        applySimpleTimezoneSpoofing();
+                    } else {
+                        retryCount++;
+                        if (retryCount < maxRetries) {
+                            console.log(`🌍 No timezone settings received, retrying ${retryCount}/${maxRetries} in 100ms...`);
+                            setTimeout(getTimezoneSettings, 100);
+                        } else {
+                            console.log('❌ Max retries reached, using default timezone');
+                        }
+                    }
+                });
+            } else {
+                retryCount++;
+                if (retryCount < maxRetries) {
+                    console.log(`⚠️ Chrome runtime not available, retrying ${retryCount}/${maxRetries} in 100ms...`);
+                    setTimeout(getTimezoneSettings, 100);
+                } else {
+                    console.log('❌ Max retries reached, Chrome runtime not available');
+                }
+            }
+        } catch (e) {
+            retryCount++;
+            if (retryCount < maxRetries) {
+                console.log(`⚠️ Error getting timezone settings, retrying ${retryCount}/${maxRetries} in 100ms:`, e);
+                setTimeout(getTimezoneSettings, 100);
+            } else {
+                console.log('❌ Max retries reached, error getting timezone settings:', e);
+            }
+        }
+    }
+    
+    // Start getting settings
+    getTimezoneSettings();
     
     // Listen for updates
     window.addEventListener('message', function(event) {
@@ -126,10 +307,46 @@
             timezone = event.data.timezone || timezone;
             locale = event.data.locale || locale;
             timezoneOffset = event.data.timezoneOffset || timezoneOffset;
-            console.log('🌍 Received timezone update:', { timezone, locale, timezoneOffset });
+            console.log('🌍 Received timezone update via postMessage:', { timezone, locale, timezoneOffset });
             applySimpleTimezoneSpoofing();
         }
     });
+    
+    // Also listen for storage changes via postMessage
+    window.addEventListener('storage', function(event) {
+        if (event.key === 'current_timezone' || event.key === 'current_locale') {
+            console.log('🌍 Storage changed, requesting timezone update...');
+            // Request update from background
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                chrome.runtime.sendMessage({ type: 'getTimezoneSettings' }, (response) => {
+                    if (response && response.success && response.timezone) {
+                        timezone = response.timezone;
+                        locale = response.locale || 'en-US';
+                        timezoneOffset = response.timezoneOffset || 0;
+                        console.log('🌍 Updated timezone from storage change:', { timezone, locale, timezoneOffset });
+                        applySimpleTimezoneSpoofing();
+                    }
+                });
+            }
+        }
+    });
+    
+    // Expose an update hook so background can push new tz/locale live
+    try {
+        window.updateEarlyTimezoneSpoofing = function(newTimezone, newLocale) {
+            try {
+                if (newTimezone) { timezone = newTimezone; }
+                if (newLocale) { locale = newLocale; }
+                console.log('🌍 SIMPLE Timezone: live update received →', { timezone, locale });
+                // Re-apply overrides so any closures pick up the new values
+                applySimpleTimezoneSpoofing();
+            } catch (e) {
+                console.warn('⚠️ SIMPLE Timezone: live update failed:', e);
+            }
+        };
+    } catch (e) {
+        console.warn('⚠️ SIMPLE Timezone: unable to expose update hook:', e);
+    }
     
     console.log('🌍 SIMPLE Timezone: Ready');
     

@@ -750,10 +750,12 @@ class BackgroundManager {
             
             // Update location spoofing if set to match IP
             const locationData = await chrome.storage.local.get(['location_config']);
-            if (locationData.location_config === 'matchIP') {
+            console.log('🌍 updateIPAndRules: location_config:', locationData.location_config);
+            if (locationData.location_config === 'matchIP' || !locationData.location_config) {
                 console.log('🌍 IP changed, updating location spoofing...');
                 const ipLocation = await this.fetchIPLocation();
                 if (ipLocation) {
+                    console.log('🌍 IP location fetched in updateIPAndRules:', ipLocation);
                     await chrome.storage.local.set({
                         timezone: ipLocation.timezone,
                         locale: ipLocation.locale,
@@ -761,20 +763,19 @@ class BackgroundManager {
                         longitude: ipLocation.longitude
                     });
                     
-                    // Apply to all existing tabs
-                    await this.applyLocationSpoofing(
-                        ipLocation.timezone, 
-                        ipLocation.locale, 
-                        ipLocation.latitude, 
-                        ipLocation.longitude
-                    );
+                    // Re-attach debugger to all tabs with new values
+                    await this.updateAllTabsWithNewLocation(ipLocation);
                     console.log('🌍 Location spoofing updated for new IP:', ipLocation);
                     
                     // Store IP-based timezone and locale for getTimezoneSettings
                     await chrome.storage.local.set({
                         current_timezone: ipLocation.timezone,
-                        current_locale: ipLocation.locale
+                        current_locale: ipLocation.locale,
+                        timezone: ipLocation.timezone,
+                        locale: ipLocation.locale
                     });
+                    
+                    console.log('🌍 Stored IP-based timezone in updateIPAndRules:', ipLocation.timezone, 'locale:', ipLocation.locale);
                     
                     // Notify popup to update display
                     try {
@@ -933,8 +934,16 @@ class BackgroundManager {
      */
     static async initializeLocationSpoofing() {
         try {
+            console.log('🌍 initializeLocationSpoofing: Starting...');
             const data = await chrome.storage.local.get(['location_config', 'timezone', 'locale', 'latitude', 'longitude']);
             const config = data.location_config || 'matchIP';
+            console.log('🌍 initializeLocationSpoofing: Config:', config, 'Data:', data);
+            
+            // Set default location_config if not set
+            if (!data.location_config) {
+                await chrome.storage.local.set({ location_config: 'matchIP' });
+                console.log('🌍 Set default location_config to matchIP');
+            }
             
             if (config !== 'browserDefault') {
                 let timezone = data.timezone || '';
@@ -944,8 +953,10 @@ class BackgroundManager {
                 
                 // If matchIP, fetch current IP location
                 if (config === 'matchIP') {
+                    console.log('🌍 Fetching IP location for matchIP...');
                     const ipLocation = await this.fetchIPLocation();
                     if (ipLocation) {
+                        console.log('🌍 IP location fetched:', ipLocation);
                         timezone = ipLocation.timezone;
                         locale = ipLocation.locale;
                         latitude = ipLocation.latitude;
@@ -956,7 +967,19 @@ class BackgroundManager {
                             current_timezone: ipLocation.timezone,
                             current_locale: ipLocation.locale
                         });
+                        
+                        console.log('🌍 Stored IP-based timezone in initializeLocationSpoofing:', ipLocation.timezone, 'locale:', ipLocation.locale);
+                        
+                        // Also update the main timezone fields
+                        await chrome.storage.local.set({
+                            timezone: ipLocation.timezone,
+                            locale: ipLocation.locale
+                        });
+                    } else {
+                        console.log('❌ Failed to fetch IP location');
                     }
+                } else {
+                    console.log('🌍 Not using matchIP, using existing timezone settings');
                 }
                 
                 // Apply location spoofing to all tabs
@@ -973,15 +996,21 @@ class BackgroundManager {
      */
     static async fetchIPLocation() {
         try {
-            const response = await fetch('http://ip-api.com/json?fields=status,message,countryCode,lat,lon,timezone,query');
+            console.log('🌍 fetchIPLocation: Starting...');
+            const response = await fetch(`http://ip-api.com/json?fields=status,message,countryCode,lat,lon,timezone,query&ts=${Date.now()}` , { cache: 'no-store' });
             const data = await response.json();
+            console.log('🌍 fetchIPLocation: Response:', data);
             if (data.status === 'success') {
-                return {
+                const result = {
                     timezone: data.timezone,
                     locale: this.getLocaleFromCountryCode(data.countryCode),
                     latitude: data.lat,
                     longitude: data.lon
                 };
+                console.log('🌍 fetchIPLocation: Result:', result);
+                return result;
+            } else {
+                console.log('❌ fetchIPLocation: API error:', data.message);
             }
         } catch (error) {
             console.error('❌ Error fetching IP location:', error);
@@ -1053,6 +1082,65 @@ class BackgroundManager {
     }
 
     /**
+     * Update all tabs with new location data (re-attach debugger with new values)
+     */
+    static async updateAllTabsWithNewLocation(ipLocation) {
+        try {
+            console.log('🔄 Updating all tabs with new location:', ipLocation);
+            const tabs = await chrome.tabs.query({});
+            
+            for (const tab of tabs) {
+                if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://') && 
+                    !tab.url.startsWith('moz-extension://') && !tab.url.startsWith('edge-extension://') &&
+                    !tab.url.startsWith('about:') && !tab.url.startsWith('file://')) {
+                    
+                    try {
+                        // First, push live values into MAIN world so no reload is needed
+                        try {
+                            await chrome.scripting.executeScript({
+                                target: { tabId: tab.id, allFrames: true },
+                                world: 'MAIN',
+                                func: (tz, loc) => {
+                                    try {
+                                        window.__ks_boot_tz__ = tz;
+                                        window.__ks_boot_locale__ = loc || 'en-US';
+                                        if (typeof window.updateEarlyTimezoneSpoofing === 'function') {
+                                            window.updateEarlyTimezoneSpoofing(tz, loc || 'en-US');
+                                        }
+                                    } catch (e) {
+                                        console.warn('⚠️ MAIN inject failed:', e);
+                                    }
+                                },
+                                args: [ipLocation.timezone, ipLocation.locale]
+                            });
+                        } catch (e) {
+                            console.warn(`⚠️ Direct inject failed for tab ${tab.id}:`, e.message);
+                        }
+
+                        // Then re-attach debugger to refresh CDP emulations (tz/geolocation)
+                        try { await chrome.debugger.detach({ tabId: tab.id }); } catch (_) {}
+                        await this.attachDebugger(
+                            tab.id,
+                            ipLocation.timezone,
+                            ipLocation.locale,
+                            ipLocation.latitude,
+                            ipLocation.longitude
+                        );
+
+                        console.log(`✅ Updated tab ${tab.id} with new location: ${ipLocation.timezone}`);
+                    } catch (error) {
+                        console.warn(`⚠️ Failed to update tab ${tab.id}:`, error?.message || error);
+                    }
+                }
+            }
+            
+            console.log('✅ All tabs updated with new location data');
+        } catch (error) {
+            console.error('❌ Error updating all tabs with new location:', error);
+        }
+    }
+
+    /**
      * Attach debugger to tab for location spoofing
      */
     static async attachDebugger(tabId, timezone, locale, latitude, longitude) {
@@ -1075,6 +1163,18 @@ class BackgroundManager {
             }
             
             await chrome.debugger.attach({ tabId: tabId }, '1.3');
+
+            // Inject boot timezone/locale before any page script runs (first paint guarantee)
+            try {
+                const bootScript = `(() => { try { window.__ks_boot_tz__ = ${JSON.stringify(timezone || '')}; window.__ks_boot_locale__ = ${JSON.stringify(locale || 'en-US')}; } catch(e){} })();`;
+                await chrome.debugger.sendCommand(
+                    { tabId: tabId },
+                    'Page.addScriptToEvaluateOnNewDocument',
+                    { source: bootScript }
+                );
+            } catch (e) {
+                console.log('⚠️ addScriptToEvaluateOnNewDocument failed:', e?.message || e);
+            }
             
             if (timezone) {
                 await chrome.debugger.sendCommand(
@@ -1104,6 +1204,14 @@ class BackgroundManager {
                 );
             }
             
+            // Apply a JS fallback layer as well to defeat aggressive probes
+            try {
+                await BackgroundManager.applyJSFallbackTimezone(tabId, timezone, locale);
+                console.log('🌍 Location spoofing applied (with JS fallback) to tab:', tabId);
+            } catch (e) {
+                console.log('⚠️ JS fallback after debugger failed:', e?.message || e);
+            }
+            
             console.log('🌍 Location spoofing applied to tab:', tabId);
         } catch (error) {
             if (error.message && (
@@ -1111,10 +1219,79 @@ class BackgroundManager {
                 error.message.includes('Cannot access a chrome:// URL') ||
                 error.message.includes('Cannot attach to this target')
             )) {
-                // Expected errors, ignore silently
+                // If DevTools is open (another debugger attached), fall back to JS override in MAIN world
+                if (error.message.includes('Another debugger is already attached')) {
+                    try {
+                        await BackgroundManager.applyJSFallbackTimezone(tabId, timezone, locale);
+                        console.log('🌍 Applied JS fallback timezone override to tab (DevTools open):', tabId);
+                    } catch (e) {
+                        console.warn('⚠️ JS fallback timezone override failed:', e.message);
+                    }
+                }
                 return;
             }
             console.warn('⚠️ Could not attach debugger to tab:', tabId, error.message);
+        }
+    }
+
+    /**
+     * Apply JS-only fallback overrides when debugger cannot attach (e.g., DevTools open)
+     */
+    static async applyJSFallbackTimezone(tabId, timezone, locale) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId, allFrames: true },
+                world: 'MAIN',
+                func: (tz, loc) => {
+                    try {
+                        const OriginalDateTimeFormat = Intl.DateTimeFormat;
+                        const OriginalDate = Date;
+
+                        // Override Intl.DateTimeFormat to always use provided timezone
+                        Intl.DateTimeFormat = function(locales, options) {
+                            const optionsPatched = { ...(options || {}), timeZone: tz };
+                            return new OriginalDateTimeFormat(locales || loc || 'en-US', optionsPatched);
+                        };
+                        if (OriginalDateTimeFormat.supportedLocalesOf) {
+                            Intl.DateTimeFormat.supportedLocalesOf = OriginalDateTimeFormat.supportedLocalesOf;
+                        }
+
+                        // Override resolvedOptions to report timezone
+                        const proto = OriginalDateTimeFormat.prototype;
+                        if (proto && proto.resolvedOptions) {
+                            const originalResolved = proto.resolvedOptions;
+                            proto.resolvedOptions = function() {
+                                const r = originalResolved.call(this) || {};
+                                r.timeZone = tz;
+                                return r;
+                            };
+                        }
+
+                        // Minimal Date override for getTimezoneOffset alignment
+                        const calcOffset = () => {
+                            const now = new OriginalDate();
+                            const utc = new OriginalDate(now.getTime() + (now.getTimezoneOffset() * 60000));
+                            const spoofed = new OriginalDate(utc.toLocaleString('en-US', { timeZone: tz }));
+                            return Math.round((spoofed.getTime() - utc.getTime()) / 60000);
+                        };
+                        const offset = calcOffset();
+                        Object.defineProperty(OriginalDate.prototype, 'getTimezoneOffset', {
+                            value: function() { return -offset; }, configurable: true, writable: true
+                        });
+
+                        // Navigator language hints
+                        try {
+                            Object.defineProperty(navigator, 'language', { get: () => (loc || 'en-US'), configurable: true });
+                            Object.defineProperty(navigator, 'languages', { get: () => [loc || 'en-US'], configurable: true });
+                        } catch {}
+                    } catch (e) {
+                        console.log('⚠️ JS fallback timezone error:', e);
+                    }
+                },
+                args: [timezone, locale]
+            });
+        } catch (e) {
+            console.warn('⚠️ Failed to execute JS fallback timezone script:', e.message);
         }
     }
 
@@ -1126,13 +1303,21 @@ class BackgroundManager {
             console.log('🚀 Kill Switch Initializing...');
             
             // Initialize WebRTC settings
+            console.log('🌍 Initializing WebRTC...');
             await this.initializeWebRTC();
             
-            // Initialize location spoofing
-            await this.initializeLocationSpoofing();
-            
             // First, get IP and set up rules
+            console.log('🌍 Updating IP and rules...');
             await this.updateIPAndRules();
+            
+            // Initialize location spoofing (after IP is fetched)
+            console.log('🌍 Initializing location spoofing...');
+            try {
+                await this.initializeLocationSpoofing();
+                console.log('🌍 Location spoofing initialization completed');
+            } catch (error) {
+                console.error('❌ Error in initializeLocationSpoofing:', error);
+            }
             
             await this.updateLocalStorage();
             
@@ -1178,6 +1363,24 @@ class BackgroundManager {
                                     longitude: longitude
                                 });
                             }
+                        }
+
+                        // 1) Inject boot values synchronously into MAIN world before page scripts run
+                        try {
+                            await chrome.scripting.executeScript({
+                                target: { tabId: details.tabId, frameIds: [0] },
+                                world: 'MAIN',
+                                injectImmediately: true,
+                                func: (tz, loc) => {
+                                    try {
+                                        window.__ks_boot_tz__ = tz;
+                                        window.__ks_boot_locale__ = loc;
+                                    } catch (_) {}
+                                },
+                                args: [timezone, locale]
+                            });
+                        } catch (e) {
+                            console.log('⚠️ Could not inject boot timezone values:', e?.message || e);
                         }
                         
                         // Apply to new tab
@@ -2700,6 +2903,14 @@ function FindProxyForURL(url, host) {
                                 // Apply location spoofing
                                 await this.applyLocationSpoofing(timezone, locale, latitude, longitude);
                                 console.log('🌍 Location spoofing updated:', { timezone, locale, latitude, longitude });
+                                
+                                // Store current timezone and locale for getTimezoneSettings
+                                await chrome.storage.local.set({
+                                    current_timezone: timezone,
+                                    current_locale: locale
+                                });
+                                
+                                console.log('🌍 Stored current timezone in updateLocationSpoofing:', timezone, 'locale:', locale);
                             }
                             
                             sendResponse({ success: true });
@@ -2730,19 +2941,21 @@ function FindProxyForURL(url, host) {
                                 console.log('🌍 Using custom timezone:', timezone);
                             } else {
                                 // Use default timezone
-                                timezone = 'America/Toronto';
-                                locale = 'en-CA';
-                                console.log('🌍 Using default timezone:', timezone);
+                                timezone = 'UTC';
+                                locale = 'en-US';
+                                console.log('🌍 Using default timezone (no IP data):', timezone);
                             }
                             
                             // Calculate timezone offset from resolved timezone
-                            let timezoneOffset = -300;
+                            let timezoneOffset = 0;
                             try {
                                 const now = new Date();
                                 const utc = new Date(now.getTime() + (now.getTimezoneOffset() * 60000));
                                 const spoofedTime = new Date(utc.toLocaleString('en-US', { timeZone: timezone }));
                                 timezoneOffset = Math.round((spoofedTime.getTime() - utc.getTime()) / 60000);
-                            } catch {}
+                            } catch (e) {
+                                console.log('❌ Error calculating timezone offset:', e);
+                            }
                             
                             console.log('🌍 Sending timezone settings:', { timezone, locale, timezoneOffset });
                             sendResponse({ success: true, timezone, locale, timezoneOffset });
