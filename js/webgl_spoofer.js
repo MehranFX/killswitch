@@ -4,7 +4,7 @@
   if (window.__ksWebglSpoofApplied) return;
   window.__ksWebglSpoofApplied = true;
 
-  // Hide WebGL INVALID_ENUM noise and timezone-related errors
+  // Hide WebGL INVALID_ENUM noise and privacy-related errors
   try{
     const origError = console.error.bind(console);
     console.error = function(){
@@ -13,6 +13,9 @@
       if (msg && msg.includes('WebGL: INVALID_ENUM') && msg.includes('getParameter')) return;
       // Hide timezone-related "Unimplemented type" errors
       if (msg && msg.includes('Unimplemented type: 3')) return;
+      // Hide location-related errors
+      if (msg && msg.includes('Error fetching location')) return;
+      if (msg && msg.includes('Invalid LatLng object')) return;
       return origError.apply(console, arguments);
     };
   }catch(_e){}
