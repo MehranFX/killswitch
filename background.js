@@ -484,6 +484,14 @@ class BackgroundManager {
      */
     static async setColor(tabID) {
         try {
+            // Respect icon preference: if dynamic flag is enabled, do not override with static icons
+            const pref = await chrome.storage.local.get(['icon_type','ip_flag']);
+            if (pref.icon_type !== 'static') {
+                if (pref.ip_flag) {
+                    await IconManager.updateIcon(pref.ip_flag);
+                }
+                return; // do not continue to static color paths
+            }
             const tabColorData = await chrome.storage.local.get([`tabColors${tabID}`]);
             const tabColor = tabColorData[`tabColors${tabID}`];
             let iconPath = '/img/icon-48x48-grey.png';
@@ -705,6 +713,16 @@ class BackgroundManager {
                 cachedCountry: country,
                 countryTimestamp: now
             });
+            
+            // Respect icon preference
+            try {
+                const pref = await chrome.storage.local.get(['icon_type']);
+                if (pref.icon_type === 'static') {
+                    await IconManager.setDefaultIcon();
+                } else {
+                    await IconManager.updateIcon(flag);
+                }
+            } catch (_) {}
             
             // Update location spoofing if set to match IP
             const locationData = await chrome.storage.local.get(['location_config']);
@@ -1278,6 +1296,16 @@ class BackgroundManager {
             }
             
             await this.updateLocalStorage();
+            
+            // Ensure toolbar icon is set based on preference on startup
+            try {
+                const { icon_type, ip_flag } = await chrome.storage.local.get(['icon_type','ip_flag']);
+                if (icon_type === 'static') {
+                    await IconManager.setDefaultIcon();
+                } else if (ip_flag) {
+                    await IconManager.updateIcon(ip_flag);
+                }
+            } catch (_) {}
             
             // Set up message listener
             chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -2671,6 +2699,22 @@ function FindProxyForURL(url, host) {
                         }
                         break;
                         
+                    case 'updateIconType':
+                        try {
+                            const { iconType } = request;
+                            await chrome.storage.local.set({ icon_type: iconType });
+                            if (iconType === 'static') {
+                                await IconManager.setDefaultIcon();
+                            } else {
+                                const data = await chrome.storage.local.get(['ip_flag']);
+                                if (data.ip_flag) await IconManager.updateIcon(data.ip_flag);
+                            }
+                            sendResponse({ success: true });
+                        } catch (error) {
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
                     case 'debugCountryRules':
                         try {
                             const countryRules = await chrome.storage.local.get(['country_rules']);
@@ -2952,3 +2996,132 @@ function validateIP(details) {
 
 // Initialize when script loads
 BackgroundManager.initialize();
+
+class IconManager {
+    static async updateIcon(flag) {
+        try {
+            // Try to use country code if available for better visual via CDN PNG
+            const store = await chrome.storage.local.get(['ip_country']);
+            const country = (store.ip_country || '').toLowerCase();
+            const sizes = [16,32,48,128];
+            const imageData = {};
+            for (const s of sizes) {
+                const canvas = new OffscreenCanvas(s, s);
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, s, s);
+                let drawn = false;
+                if (country && /^[a-z]{2}$/.test(country)) {
+                    try {
+                        const bmp = await this._getFlagBitmap(country, s);
+                        if (bmp) {
+                            // preserve aspect ratio (flags are 4:3). Fit max within square with small padding
+                            const padding = Math.max(1, Math.round(s * 0.03));
+                            const maxW = s - padding * 2;
+                            const maxH = s - padding * 2;
+                            const aspect = bmp.width / bmp.height; // preserve 4:3
+                            let dw = maxW, dh = Math.round(maxW / aspect);
+                            if (dh > maxH) { dh = maxH; dw = Math.round(maxH * aspect); }
+                            const dx = Math.round((s - dw) / 2);
+                            const dy = Math.round((s - dh) / 2);
+                            // restore clean white background, no border
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, s, s);
+                            ctx.drawImage(bmp, dx, dy, dw, dh);
+                            drawn = true;
+                        }
+                    } catch (_) { /* fallback to emoji below */ }
+                }
+                if (!drawn) {
+                    // Fallback: render emoji centered
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, s, s);
+                    ctx.font = `bold ${Math.floor(s*1.1)}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'alphabetic';
+                    ctx.fillStyle = '#000000';
+                    const metrics = ctx.measureText(flag || '🏳️');
+                    const textHeight = (metrics.actualBoundingBoxAscent || s*0.8) + (metrics.actualBoundingBoxDescent || s*0.2);
+                    const y = (s + (metrics.actualBoundingBoxAscent || textHeight*0.8) - (metrics.actualBoundingBoxDescent || textHeight*0.2)) / 2;
+                    ctx.fillText(flag || '🏳️', s/2, y);
+                }
+                imageData[String(s)] = ctx.getImageData(0, 0, s, s);
+            }
+            await chrome.action.setIcon({ imageData });
+        } catch (_) {}
+    }
+    static async setDefaultIcon() {
+        try {
+            const paths = {
+                16: 'img/icon-48x48-grey.png',
+                32: 'img/icon-48x48-grey.png',
+                48: 'img/icon-48x48-grey.png',
+                128: 'img/icon-128x128-grey.png'
+            };
+            await chrome.action.setIcon({ path: paths });
+        } catch (_) {}
+    }
+    static async _getFlagBitmap(country, size) {
+        // cache key per size
+        const key = `flag_png_${country}_${size}`;
+        try {
+            const cached = await chrome.storage.local.get([key]);
+            if (cached[key]) {
+                const blob = this._base64ToBlob(cached[key], 'image/png');
+                return await createImageBitmap(blob);
+            }
+        } catch (_) {}
+        try {
+            // choose a good CDN dimension close to our target square
+            // flagcdn provides WxH, flags ~4:3. We map square size to width close-by
+            const widthMap = {16:32, 32:64, 48:96, 128:256};
+            const w = widthMap[size] || 128;
+            const url = `https://flagcdn.com/${w}x${Math.round(w*0.75)}/${country}.png`;
+            const res = await fetch(url, { cache: 'no-store' });
+            if (!res.ok) return null;
+            const blob = await res.blob();
+            // cache as base64
+            try {
+                const b64 = await this._blobToBase64(blob);
+                const toStore = {}; toStore[key] = b64; await chrome.storage.local.set(toStore);
+            } catch (_) {}
+            return await createImageBitmap(blob);
+        } catch (_) {
+            return null;
+        }
+    }
+    static _blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve((reader.result || '').toString().split(',')[1] || '');
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    }
+    static _base64ToBlob(b64, mime) {
+        const byteChars = atob(b64);
+        const byteNums = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+        const byteArray = new Uint8Array(byteNums);
+        return new Blob([byteArray], { type: mime });
+    }
+}
+// Listen storage change for ip_flag and icon_type
+chrome.storage.onChanged.addListener(async (changes) => {
+    try {
+        if (changes.icon_type) {
+            const v = changes.icon_type.newValue;
+            if (v === 'static') {
+                await IconManager.setDefaultIcon();
+            } else {
+                const data = await chrome.storage.local.get(['ip_flag']);
+                if (data.ip_flag) await IconManager.updateIcon(data.ip_flag);
+            }
+        }
+        if (changes.ip_flag) {
+            const pref = await chrome.storage.local.get(['icon_type']);
+            if (pref.icon_type !== 'static') {
+                await IconManager.updateIcon(changes.ip_flag.newValue);
+            }
+        }
+    } catch (_) {}
+});

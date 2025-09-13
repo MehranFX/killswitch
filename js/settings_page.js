@@ -7,7 +7,8 @@
       'canvas_protection','webgl_protection','audio_protection','font_protection','screen_spoofing',
       'battery_protection','memory_spoofing','hardware_spoofing','language_spoofing','dnt_header',
       'referrer_control','storage_protection','cookie_protection','block_ping',
-      'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection'
+      'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection',
+      'icon_type'
     ]);
     
     const input = document.getElementById('fallback_proxy');
@@ -29,6 +30,10 @@
     if(latitude){ latitude.value = data.latitude || '' }
     const longitude = document.getElementById('longitude');
     if(longitude){ longitude.value = data.longitude || '' }
+
+    // Icon type
+    const iconType = document.getElementById('icon_type');
+    if(iconType){ iconType.value = data.icon_type || 'country_flag' }
     
     // Privacy protection settings
     const privacySettings = [
@@ -123,6 +128,10 @@
     const locationConfig = document.getElementById('location_config');
     const config = locationConfig ? locationConfig.value : 'matchIP';
     
+    // Icon type
+    const iconTypeEl = document.getElementById('icon_type');
+    const iconType = iconTypeEl ? iconTypeEl.value : 'country_flag';
+    
     let timezone = '', locale = '', latitude = '', longitude = '';
     
     if (config === 'custom') {
@@ -175,6 +184,7 @@
       locale: locale,
       latitude: latitude,
       longitude: longitude,
+      icon_type: iconType,
       ...privacyData
     });
     
@@ -207,6 +217,15 @@
     } catch (error) {
       // Error removed
     }
+
+    // Apply icon change via background
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'updateIconType',
+        iconType: iconType
+      });
+      // ignore response
+    } catch (_) {}
     
     const msg = document.getElementById('message');
     if(msg){ msg.textContent = 'Saved'; msg.style.display = 'block'; setTimeout(()=> msg.style.display='none', 2000); }
@@ -222,6 +241,16 @@
     if(locationConfig){ 
       locationConfig.addEventListener('change', (e) => {
         toggleCustomFields(e.target.value);
+      });
+    }
+
+    // Apply icon change immediately on select change (UX)
+    const iconType = document.getElementById('icon_type');
+    if(iconType){
+      iconType.addEventListener('change', async (e) => {
+        const v = e.target.value;
+        await chrome.storage.local.set({ icon_type: v });
+        try { await chrome.runtime.sendMessage({ type: 'updateIconType', iconType: v }); } catch(_) {}
       });
     }
   });
