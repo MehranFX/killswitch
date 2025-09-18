@@ -1,5 +1,65 @@
 "use strict";
 
+// Utility classes for options page
+const ValidationUtils = {
+    isValidIP: function(ip) {
+        const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+        const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+        return ipv4Regex.test(ip) || ipv6Regex.test(ip);
+    },
+    
+    isValidDomain: function(domain) {
+        if (!domain || typeof domain !== 'string') return false;
+        domain = domain.trim();
+        if (domain.length === 0) return false;
+        
+        // Allow wildcards
+        if (domain.includes('*')) {
+            const wildcardPattern = /^[\*\w\-\.]+$/;
+            return wildcardPattern.test(domain);
+        }
+        
+        // Regular domain validation
+        const domainPattern = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/;
+        return domainPattern.test(domain) && domain.length <= 253;
+    },
+    
+    isValidURL: function(url) {
+        try {
+            new URL(url);
+            return true;
+        } catch {
+            // Try with protocol
+            try {
+                new URL('http://' + url);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+    }
+};
+
+const ErrorHandler = {
+    handle: async function(error, context) {
+        console.error(`[${context}] Error:`, error);
+        try {
+            const errorLog = {
+                message: error.message,
+                stack: error.stack,
+                context: context,
+                timestamp: Date.now()
+            };
+            
+            await chrome.storage.local.set({
+                lastError: errorLog
+            });
+        } catch (logError) {
+            console.error('Failed to log error:', logError);
+        }
+    }
+};
+
 /**
  * Enhanced options page functionality with better validation and error handling
  */

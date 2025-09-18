@@ -7,8 +7,16 @@
     <link href="https://fonts.googleapis.com/css?family=Dosis" rel="stylesheet">
     <link rel="stylesheet" href="../css/options.css" />
     <style>
-      html, body{ overflow-x: hidden; }
-      #content{ max-height: none !important; overflow: visible !important; }
+      html, body{ overflow-x: hidden; min-height: auto; position: relative; height: auto !important; overflow: visible !important; }
+      #content{ max-height: none !important; overflow: visible !important; height: auto !important; padding-bottom: 20px !important; }
+      
+      /* Force proper window sizing */
+      body { 
+        height: auto !important; 
+        min-height: auto !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+      }
       .field-label{ font-size:12px; margin-bottom:4px; display:block; }
       .cr-narrow{ width: 300px; max-width: 300px; }
       .domain-row input{ width:300px; padding:10px 12px; font-size:15px; }
@@ -24,6 +32,139 @@
       .top-close{ position:fixed; right:8px; top:6px; font-size:18px; color:#888; cursor:pointer; user-select:none; }
       .top-close:hover{ color:#333; }
       .status { margin: 10px auto; text-align: center; color: #28a745; font-size: 13px; }
+      
+      /* Saved rules styling */
+      .cr-country-pill {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 4px !important;
+        padding: 4px 8px !important;
+        margin: 2px !important;
+        border-radius: 16px !important;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        border: 1px solid #dee2e6 !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+        font-size: 12px !important;
+        white-space: nowrap !important;
+      }
+      
+      .cr-flag {
+        font-size: 16px !important;
+        line-height: 1 !important;
+        display: inline-block !important;
+        width: 20px !important;
+        text-align: center !important;
+        filter: drop-shadow(0 1px 1px rgba(0,0,0,0.2)) !important;
+      }
+      
+      .cr-code {
+        font-weight: 600 !important;
+        color: #495057 !important;
+        font-size: 11px !important;
+        letter-spacing: 0.5px !important;
+      }
+      
+      /* Action buttons hover effects */
+      #cr_add:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 6px rgba(40,167,69,0.4) !important;
+        background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%) !important;
+      }
+      
+      #cr_save_all:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 6px rgba(0,123,255,0.4) !important;
+        background: linear-gradient(135deg, #0056b3 0%, #003d82 100%) !important;
+      }
+      
+      #cr_add:active, #cr_save_all:active {
+        transform: translateY(0);
+        box-shadow: 0 1px 2px rgba(0,123,255,0.3);
+      }
+      
+      /* Delete button styling */
+      .delete {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+        color: white !important;
+        text-decoration: none !important;
+        padding: 6px 12px !important;
+        border-radius: 6px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        border: none !important;
+        box-shadow: 0 2px 4px rgba(220,53,69,0.3) !important;
+      }
+      
+      .delete:hover {
+        background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 8px rgba(220,53,69,0.4) !important;
+      }
+      
+      /* Grid layout for saved rules */
+      #cr_saved_list > div {
+        background: white !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 8px !important;
+        padding: 12px !important;
+        margin-bottom: 8px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transition: all 0.3s ease !important;
+      }
+      
+      #cr_saved_list > div:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        transform: translateY(-1px) !important;
+      }
+      
+      /* Fix flags alignment - horizontal inline */
+      #cr_saved_list > div > span:nth-child(3) {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+        align-items: center !important;
+      }
+      
+      /* Bottom buttons container - proper spacing */
+      div[align="center"]:last-child {
+        margin-top: 30px !important;
+        margin-bottom: 30px !important;
+        padding: 20px !important;
+        background: rgba(248,249,250,0.9) !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        position: relative !important;
+        max-width: 400px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        display: block !important;
+        visibility: visible !important;
+      }
+      
+      /* Ensure buttons are visible */
+      #cr_add, #cr_save_all {
+        display: inline-block !important;
+        visibility: visible !important;
+      }
+      
+      /* Force show bottom buttons */
+      body > div:last-child[align="center"] {
+        display: block !important;
+        visibility: visible !important;
+        margin-top: 30px !important;
+        padding: 20px !important;
+        background: #f8f9fa !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 8px !important;
+        text-align: center !important;
+      }
+      
+      /* Content wrapper to ensure proper spacing */
+      #content {
+        padding-bottom: 20px !important;
+      }
     </style>
   </head>
   <body>
@@ -56,18 +197,17 @@
         </div>
       </div>
 
+      <!-- Action buttons before saved rules -->
+      <div style="text-align: center; margin: 10px 0; padding: 10px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
+        <a id="cr_add" href="#" style="display: inline-block; padding: 6px 12px; margin: 0 4px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 11px; text-transform: uppercase; box-shadow: 0 2px 4px rgba(40,167,69,0.3); transition: all 0.3s ease;">ADD NEW RULE</a>
+        <a id="cr_save_all" href="#" style="display: inline-block; padding: 6px 12px; margin: 0 4px; background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 11px; text-transform: uppercase; box-shadow: 0 2px 4px rgba(0,123,255,0.3); transition: all 0.3s ease;">SAVE RULES</a>
+      </div>
+
       <div class="rule-item" style="text-align:left; overflow-x:hidden; margin-top:12px;">
         <p style="margin-bottom:8px;"><strong>Saved country rules</strong></p>
         <div id="cr_saved_list" style="display:flex; flex-direction:column; gap:8px;"></div>
       </div>
-    </div>
-    <div align="center">
-      <p>
-        <a id="cr_add" href="#">ADD NEW RULE</a>
-        <a id="cr_save_all" href="#">SAVE RULES</a>
-      </p>
-    </div>
-    <script type="text/javascript" src="../js/utils.js"></script>
+    
     <script type="text/javascript" src="../js/country_rules_page.js"></script>
   </body>
  </html>

@@ -753,11 +753,11 @@ class BackgroundManager {
                     
                     // Log removed
                     
-                    // Notify popup to update display
+                    // Notify all tabs (including content scripts) to update timezone
                     try {
                         const tabs = await chrome.tabs.query({});
                         for (const tab of tabs) {
-                            if (tab.url && tab.url.includes('chrome-extension://')) {
+                            if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://') || tab.url.includes('chrome-extension://'))) {
                                 try {
                                     await chrome.tabs.sendMessage(tab.id, {
                                         type: 'locationUpdated',
@@ -1392,8 +1392,16 @@ class BackgroundManager {
             
             // Set up cached rules for sync access
             await this.setupCachedRules();
-            // Build immediate blocking rules (DNR) to avoid late blocking
-            await this.setupDeclarativeNetRequest();
+            // Respect master toggle for DNR setup
+            const settings = await chrome.storage.local.get({ privacy_master: true });
+            if (settings.privacy_master !== false) {
+                // Build immediate blocking rules (DNR) to avoid late blocking
+                await this.setupDeclarativeNetRequest();
+            } else {
+                await this.clearDynamicRules();
+            }
+            // Sanity polyfills removed - they were causing site compatibility issues
+
             // Set up DNS level proxy routing
             const pacAppliedInit = await this.setupProxyBlocking();
             
@@ -2371,6 +2379,11 @@ function FindProxyForURL(url, host) {
      */
     static async setupDeclarativeNetRequest() {
         try {
+            const settings = await chrome.storage.local.get({ privacy_master: true });
+            if (settings.privacy_master === false) {
+                await this.clearDynamicRules();
+                return;
+            }
             // Log removed
             
             // Get all stored URLs for blocking
@@ -2382,9 +2395,9 @@ function FindProxyForURL(url, host) {
             // Log removed
             // Log removed
             
-            // Clear existing rules (only ours: ids 1..999)
+            // Clear existing rules (only ours: ids 1..1999)
             const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-            const ruleIdsToRemove = existingRules.filter(r=> r.id>=1 && r.id<=999).map(rule => rule.id);
+            const ruleIdsToRemove = existingRules.filter(r=> r.id>=1 && r.id<=1999).map(rule => rule.id);
             if (ruleIdsToRemove.length > 0) {
                 await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIdsToRemove });
             }
@@ -2397,8 +2410,46 @@ function FindProxyForURL(url, host) {
             
             // Create rules for each URL
             const rules = [];
-            // start ids from 1.. to avoid clashing
+            // start ids from 1.. to avoid clashing (reserve 1500..1999 for fp stubs)
             let ruleId = 1;
+
+            // Global anti-fingerprinting: redirect common FingerprintJS script URLs to local stub
+            const fpTargets = [
+                '||cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@*/*/fp.umd.js',
+                '||cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@*/*/fingerprint2.min.js',
+                '||openfpcdn.io/fingerprintjs/*/fp.umd.js',
+                '||openfpcdn.io/fingerprintjs/*/fingerprint2.min.js',
+                '||static.cloudflareinsights.com/beacon.min.js'
+            ];
+            let fpRuleId = 1500;
+            for (const urlFilter of fpTargets) {
+                rules.push({
+                    id: fpRuleId++,
+                    priority: 1000,
+                    action: { type: 'redirect', redirect: { extensionPath: '/js/stubs/fp_stub.js' } },
+                    condition: { urlFilter, resourceTypes: ['script'] }
+                });
+            }
+            
+            // Add exception rules for essential login resources to prevent blocking
+            const loginExceptions = [
+                { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
+                    urlFilter: '||google-ads.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
+                }},
+                { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
+                    urlFilter: '||googletagmanager.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
+                }},
+                { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
+                    urlFilter: '||google-analytics.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
+                }},
+                { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
+                    urlFilter: '||staticimg.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
+                }},
+                { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
+                    urlFilter: '||googleapis.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
+                }}
+            ];
+            rules.push(...loginExceptions);
             
             // Process each URL entry
             for (let i = 0; i < storedUrls.length; i++) {

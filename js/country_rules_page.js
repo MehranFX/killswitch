@@ -1,5 +1,25 @@
 "use strict";
 
+// Simple validation utilities for country rules page
+const ValidationUtils = {
+  isValidDomain: function(domain) {
+    if (!domain || typeof domain !== 'string') return false;
+    domain = domain.trim();
+    if (domain.length === 0) return false;
+    
+    // Allow wildcards
+    if (domain.includes('*')) {
+      // Basic wildcard validation - allow patterns like *.example.com or example.*
+      const wildcardPattern = /^[\*\w\-\.]+$/;
+      return wildcardPattern.test(domain);
+    }
+    
+    // Regular domain validation
+    const domainPattern = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/;
+    return domainPattern.test(domain) && domain.length <= 253;
+  }
+};
+
 (function initCountryRulesPage(){
   const ddToggle = document.getElementById('cr_dd_toggle');
   const ddPanel  = document.getElementById('cr_dd_panel');
@@ -119,7 +139,7 @@
       
       row.innerHTML = `<span style="font-weight:600;">${r.domain}</span>
                        <span style=\"color:#6c757d;\">${modeLabel}</span>
-                       <span style=\"display:flex; flex-wrap:wrap; gap:8px; align-items:center;\">${countriesHtml}</span>
+                       <span style=\"display:flex; flex-wrap:wrap; gap:6px; align-items:center;\">${countriesHtml}</span>
                        <a href="#" data-domain="${r.domain}" class="delete" style="justify-self:end;">Delete</a>`;
       row.querySelector('.delete').onclick = async (e)=>{
         e.preventDefault();
@@ -148,6 +168,12 @@
     if (!raw) { if (statusEl) statusEl.textContent = 'Please enter a domain'; return; }
     const mode = (document.querySelector('input[name="cr_mode"]:checked')?.value) || 'whitelist';
     const countriesArr = Array.from(selectedCodes);
+    
+    // Validate that at least one country is selected
+    if (countriesArr.length === 0) {
+      if (statusEl) statusEl.textContent = 'Please select at least one country';
+      return;
+    }
     
     // Support multiple comma-separated domains
     const parts = raw.split(',').map(s=> (s||'').trim()).filter(Boolean);

@@ -8,7 +8,7 @@
       'battery_protection','memory_spoofing','hardware_spoofing','language_spoofing','dnt_header',
       'referrer_control','storage_protection','cookie_protection','block_ping',
       'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection',
-      'icon_type'
+      'icon_type','privacy_master'
     ]);
     
     const input = document.getElementById('fallback_proxy');
@@ -34,6 +34,18 @@
     // Icon type
     const iconType = document.getElementById('icon_type');
     if(iconType){ iconType.value = data.icon_type || 'country_flag' }
+    
+    // Master toggle
+    const master = document.getElementById('privacy_master');
+    if(master){
+      master.checked = data.privacy_master !== false; // default true
+      // Sync localStorage on load
+      try { localStorage.setItem('ks_privacy_master', (data.privacy_master !== false) ? 'on' : 'off'); } catch(_) {}
+      setChildrenDisabled(!master.checked);
+      master.addEventListener('change', ()=>{
+        setChildrenDisabled(!master.checked);
+      });
+    }
     
     // Privacy protection settings
     const privacySettings = [
@@ -185,8 +197,10 @@
       latitude: latitude,
       longitude: longitude,
       icon_type: iconType,
+      privacy_master: (document.getElementById('privacy_master')?.checked !== false),
       ...privacyData
     });
+    try { localStorage.setItem('ks_privacy_master', (document.getElementById('privacy_master')?.checked !== false) ? 'on' : 'off'); } catch(_) {}
     
     // Apply WebRTC policy immediately via background script
     try {
@@ -229,6 +243,16 @@
     
     const msg = document.getElementById('message');
     if(msg){ msg.textContent = 'Saved'; msg.style.display = 'block'; setTimeout(()=> msg.style.display='none', 2000); }
+  }
+
+  function setChildrenDisabled(disabled){
+    const ids = [
+      'canvas_protection','webgl_protection','audio_protection','font_protection','screen_spoofing',
+      'battery_protection','memory_spoofing','hardware_spoofing','language_spoofing','dnt_header',
+      'referrer_control','storage_protection','cookie_protection','block_ping',
+      'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection'
+    ];
+    ids.forEach(id=>{ const el = document.getElementById(id); if(el){ el.disabled = disabled; }});
   }
 
   document.addEventListener('DOMContentLoaded', () => {

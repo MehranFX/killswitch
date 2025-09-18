@@ -33,6 +33,20 @@
     "content_scripts": [
         {
             "matches": ["<all_urls>"],
+            "js": ["js/timezone_early_override.js"],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "MAIN"
+        },
+        {
+            "matches": ["<all_urls>"],
+            "js": ["js/privacy_protection.js"],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "ISOLATED"
+        },
+        {
+            "matches": ["<all_urls>"],
             "js": ["js/webgl_spoofer.js"],
             "run_at": "document_start",
             "all_frames": true,
@@ -40,22 +54,10 @@
         },
         {
             "matches": ["<all_urls>"],
-            "js": ["js/timezone_early.js"],
-            "run_at": "document_start",
+            "js": ["js/timezone_stealth.js"],
+            "run_at": "document_idle",
             "all_frames": true,
-            "world": "MAIN"
-        },
-        {
-            "matches": ["<all_urls>"],
-            "js": ["js/timezone_protection.js"],
-            "run_at": "document_start",
-            "all_frames": true
-        },
-        {
-            "matches": ["<all_urls>"],
-            "js": ["js/privacy_protection.js"],
-            "run_at": "document_start",
-            "all_frames": true
+            "world": "ISOLATED"
         }
     ],
 	"options_ui": {
@@ -68,7 +70,9 @@
 				"html/blocked.html",
 				"js/blocked.js",
 				"js/webgl_spoofer.js",
-				"js/timezone_inject.js",
+				"js/timezone_inject_main.js",
+				"js/privacy_inject_main.js",
+				"js/stubs/fp_stub.js",
 				"img/icon-48x48-red.png",
 				"img/icon-128x128-red.png"
 			],

@@ -1,23 +1,15 @@
 (function(){
   'use strict';
 
+  // Early hard gate: if master privacy is off, do nothing
+  try { if (localStorage && localStorage.getItem('ks_privacy_master') === 'off') { return; } } catch(_) {}
+
   if (window.__ksWebglSpoofApplied) return;
   window.__ksWebglSpoofApplied = true;
 
   // Hide WebGL INVALID_ENUM noise and privacy-related errors
   try{
-    const origError = console.error.bind(console);
-    console.error = function(){
-      const msg = arguments[0] && String(arguments[0]);
-      // Hide WebGL INVALID_ENUM errors
-      if (msg && msg.includes('WebGL: INVALID_ENUM') && msg.includes('getParameter')) return;
-      // Hide timezone-related "Unimplemented type" errors
-      if (msg && msg.includes('Unimplemented type: 3')) return;
-      // Hide location-related errors
-      if (msg && msg.includes('Error fetching location')) return;
-      if (msg && msg.includes('Invalid LatLng object')) return;
-      return origError.apply(console, arguments);
-    };
+    // Leave console.error untouched to avoid site compatibility issues
   }catch(_e){}
 
   const UNMASKED_VENDOR = 0x9245;
@@ -172,7 +164,9 @@
       };
     }
 
-    const originalGetExtension = gl.getExtension.bind(gl);
+    const originalGetExtension = (typeof gl.getExtension === 'function' && typeof gl.getExtension.bind === 'function')
+      ? gl.getExtension.bind(gl)
+      : function(){ return null; };
     gl.getExtension = function(name){
       try{
         if (!name) return null;

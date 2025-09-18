@@ -13,98 +13,121 @@
         'canvas_protection','webgl_protection','audio_protection','font_protection','screen_spoofing',
         'battery_protection','memory_spoofing','hardware_spoofing','language_spoofing','dnt_header',
         'referrer_control','storage_protection','cookie_protection','block_ping',
-        'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection'
+        'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection',
+        'privacy_master'
     ], (result) => {
-        initializePrivacyProtection(result);
+        if (result.privacy_master === false) return; // master off → skip protections
+        
+        // Inject privacy protections into MAIN world
+        injectPrivacyProtections(result);
     });
     
-    // Apply direct privacy spoofing in content script world
-    try {
+    function injectPrivacyProtections(settings) {
+        // Remove any existing privacy script
+        const existingScript = document.querySelector('script[src*="privacy_inject_main.js"]');
+        if (existingScript) {
+            existingScript.remove();
+        }
         
-        // Block cookieEnabled detection
-        Object.defineProperty(navigator, 'cookieEnabled', {
-            value: false,
-            writable: false,
-            configurable: false
+        // Get IP-based geolocation from storage
+        chrome.storage.local.get(['latitude', 'longitude'], (result) => {
+            const lat = result.latitude || 38.7945952;  // Default: Denver, Colorado
+            const lng = result.longitude || -106.5348379;
+            
+            // Create external script to inject into MAIN world with coordinates
+            const script = document.createElement('script');
+            script.src = chrome.runtime.getURL('js/privacy_inject_main.js') + '#lat=' + lat + '&lng=' + lng;
+            script.onload = function() {
+                // External privacy script loaded successfully
+                script.remove();
+            };
+            script.onerror = function() {
+                console.error('[KS Privacy] Failed to load external privacy script');
+            };
+            
+            (document.head || document.documentElement).appendChild(script);
         });
-        
-        // Block plugins detection
-        Object.defineProperty(navigator, 'plugins', {
-            value: Object.freeze([]),
-            writable: false,
-            configurable: false
-        });
-        
-        Object.defineProperty(navigator, 'mimeTypes', {
-            value: Object.freeze([]),
-            writable: false,
-            configurable: false
-        });
-        
-        // Force DNT
-        Object.defineProperty(navigator, 'doNotTrack', {
-            value: '1',
-            writable: false,
-            configurable: false
-        });
-        
-        // Block geolocation
-        if (navigator.geolocation) {
-            Object.defineProperty(navigator.geolocation, 'getCurrentPosition', {
-                value: function(success, error) {
-                    if (error) error({ code: 1, message: 'Permission denied' });
-                },
+    }
+    
+    // DEPRECATED FUNCTION - All functionality moved to injectPrivacyProtections
+    /*
+    function applyBaseProtections_DEPRECATED(){
+        // Apply direct privacy spoofing in content script world
+        try {
+            
+            // Block cookieEnabled detection (set to true to avoid breaking auth flows)
+            Object.defineProperty(navigator, 'cookieEnabled', {
+                value: true,
                 writable: false,
                 configurable: false
             });
             
-            Object.defineProperty(navigator.geolocation, 'watchPosition', {
-                value: function(success, error) {
-                    if (error) error({ code: 1, message: 'Permission denied' });
-                    return 0;
-                },
-                writable: false,
-                configurable: false
-            });
-        }
-        
-        // Block media devices
-        if (navigator.mediaDevices) {
-            Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
-                value: function() {
-                    return Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
-                },
-                writable: false,
-                configurable: false
-            });
+            // Keep plugins/mimeTypes intact for compatibility
+            // (previously forced to empty arrays)
+            // No override here.
             
-            Object.defineProperty(navigator.mediaDevices, 'enumerateDevices', {
-                value: function() {
-                    return Promise.resolve([]);
-                },
-                writable: false,
-                configurable: false
-            });
+            // Force DNT
+            try {
+                Object.defineProperty(navigator, 'doNotTrack', {
+                    value: '1',
+                    writable: false,
+                    configurable: false
+                });
+            } catch (e) {
+                // Fallback if property is not configurable
+                try {
+                    navigator.doNotTrack = '1';
+                } catch (e2) {
+                    // Cannot set doNotTrack
+                }
+            }
+            
+            // Block geolocation
+            if (navigator.geolocation) {
+                Object.defineProperty(navigator.geolocation, 'getCurrentPosition', {
+                    value: function(success, error) {
+                        if (error) error({ code: 1, message: 'Permission denied' });
+                    },
+                    writable: false,
+                    configurable: false
+                });
+                
+                Object.defineProperty(navigator.geolocation, 'watchPosition', {
+                    value: function(success, error) {
+                        if (error) error({ code: 1, message: 'Permission denied' });
+                        return 0;
+                    },
+                    writable: false,
+                    configurable: false
+                });
+            }
+            
+            // Media devices: do not override to keep compatibility with widgets
+            if (navigator.mediaDevices) {
+                // leave as-is
+            }
+            
+            // Permissions API: keep site behavior; do not force-deny
+            if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+                const originalPermQuery = navigator.permissions.query; // avoid .bind to prevent "reading 'bind'" errors
+                Object.defineProperty(navigator.permissions, 'query', {
+                    value: function(descriptor){
+                        try {
+                            return originalPermQuery.call(navigator.permissions, descriptor);
+                        } catch (e) {
+                            return Promise.resolve({ state: 'prompt', onchange: null });
+                        }
+                    },
+                    writable: false,
+                    configurable: false
+                });
+            }
+            
+            // Log removed
+            
+        } catch (e) {
+            // Log removed
         }
-        
-        // Block permissions API
-        if (navigator.permissions) {
-            Object.defineProperty(navigator.permissions, 'query', {
-                value: function(descriptor) {
-                    return Promise.resolve({
-                        state: 'denied',
-                        onchange: null
-                    });
-                },
-                writable: false,
-                configurable: false
-            });
-        }
-        
-        // Log removed
-        
-    } catch (e) {
-        // Log removed
     }
     
     function initializePrivacyProtection(settings) {
@@ -496,18 +519,14 @@
     
     function controlReferrerPolicy() {
         try {
-            // Add meta tag for referrer policy
+            // Add meta tag for referrer policy (more compatible)
             const meta = document.createElement('meta');
             meta.name = 'referrer';
-            meta.content = 'no-referrer';
+            meta.content = 'strict-origin-when-cross-origin';
             document.head.appendChild(meta);
             
-            // Override document.referrer
-            Object.defineProperty(document, 'referrer', {
-                value: '',
-                writable: false,
-                configurable: false
-            });
+            // Do not override document.referrer to empty string to keep compatibility
+            // (removing previous hard override)
             
             // Block ping attribute on links
             const originalCreateElement = document.createElement;
@@ -548,9 +567,9 @@
     
     function protectCookies() {
         try {
-            // Set secure cookie attributes
-            document.cookie = 'SameSite=Strict; Secure; HttpOnly';
-            // Log removed
+            // Previously attempted to force cookie attributes which could break auth flows.
+            // Leave cookies untouched to avoid interfering with login sessions.
+            // No-op for compatibility.
         } catch (e) {
             // Log removed
         }
@@ -709,5 +728,6 @@
             // Log removed
         }
     }
+    */
     
 })();
