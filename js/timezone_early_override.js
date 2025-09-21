@@ -72,7 +72,7 @@
             configurable: true // Allow later reconfiguration
         });
     } catch (e) {
-        console.warn('[KS Early Timezone] Could not override window.Date:', e);
+        // Silently fail - some sites prevent this override
     }
     
     // Early override applied

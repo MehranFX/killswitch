@@ -53,7 +53,7 @@
                        Date.prototype.getTimezoneOffset = spoofedGetTimezoneOffset;
                        // Used direct assignment for getTimezoneOffset
                    } catch (e2) {
-                       console.warn('[KS Timezone] Cannot override getTimezoneOffset:', e2);
+                       // Silently fail - some sites like Google prevent this override
                    }
                }
                
@@ -112,7 +112,7 @@
                 });
                 // Successfully overrode Intl.DateTimeFormat.resolvedOptions
             } catch (e) {
-                console.warn('[KS Timezone] Cannot override Intl.DateTimeFormat.resolvedOptions:', e);
+                // Silently fail - some sites prevent this override
             }
         }
         
