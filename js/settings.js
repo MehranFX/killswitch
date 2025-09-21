@@ -125,6 +125,7 @@ class SettingsManager {
             
         } catch (error) {
             await ErrorHandler.handle(error, 'storeWhitelist');
+            throw error; // Re-throw the error so it can be handled by the caller
         }
     }
 

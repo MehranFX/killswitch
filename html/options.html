@@ -1,39 +1,341 @@
 <!DOCTYPE html>
 <html>
   <head>
-  	<link href="https://fonts.googleapis.com/css?family=Dosis" rel="stylesheet">
-    <link type="text/css" rel="stylesheet" href="../css/options.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Real Kill Switch - Options</title>
+    <link href="https://fonts.googleapis.com/css?family=Dosis" rel="stylesheet">
+    <link rel="stylesheet" href="../css/options.css" />
+    <style>
+      html, body{ overflow-x: hidden; min-height: auto; position: relative; height: auto !important; overflow: visible !important; }
+      #content{ max-height: none !important; overflow: visible !important; height: auto !important; padding-bottom: 20px !important; }
+      
+      /* Force proper window sizing */
+      body { 
+        height: auto !important; 
+        min-height: auto !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+      }
+      
+      .field-label{ font-size:12px; margin-bottom:4px; display:block; }
+      .op-narrow{ width: 300px; max-width: 300px; }
+      .domain-row input{ width:300px; padding:10px 12px; font-size:15px; }
+      .ips-row textarea{ width:300px; padding:10px 12px; font-size:14px; height:80px; resize:vertical; }
+      
+      /* Rule item styling */
+      .rule-item {
+        background: white !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 8px !important;
+        padding: 15px !important;
+        margin-bottom: 12px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transition: all 0.3s ease !important;
+      }
+      
+      .rule-item:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        transform: translateY(-1px) !important;
+      }
+      
+      /* Action buttons styling */
+      #add, #save {
+        display: inline-block !important;
+        padding: 8px 16px !important;
+        margin: 0 5px !important;
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important;
+        color: white !important;
+        text-decoration: none !important;
+        border-radius: 5px !important;
+        font-weight: 600 !important;
+        font-size: 12px !important;
+        text-transform: uppercase !important;
+        box-shadow: 0 2px 4px rgba(40,167,69,0.3) !important;
+        transition: all 0.3s ease !important;
+      }
+      
+      #save {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+        box-shadow: 0 2px 4px rgba(0,123,255,0.3) !important;
+      }
+      
+      #add:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 6px rgba(40,167,69,0.4) !important;
+        background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%) !important;
+      }
+      
+      #save:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 6px rgba(0,123,255,0.4) !important;
+        background: linear-gradient(135deg, #0056b3 0%, #003d82 100%) !important;
+      }
+      
+      /* Delete button styling */
+      .delete {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+        color: white !important;
+        text-decoration: none !important;
+        padding: 6px 12px !important;
+        border-radius: 6px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        border: none !important;
+        box-shadow: 0 2px 4px rgba(220,53,69,0.3) !important;
+      }
+      
+      .delete:hover {
+        background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 8px rgba(220,53,69,0.4) !important;
+      }
+      
+      /* Message styling */
+      .message {
+        padding: 10px 15px;
+        margin: 10px 0;
+        border-radius: 6px;
+        font-weight: 600;
+        text-align: center;
+      }
+      
+      .message.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      
+      .message.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      
+      .message.info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+      
+      /* Help section styling */
+      .help-section {
+        margin: 20px 0;
+        padding: 20px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .help-section h3 {
+        margin-top: 0;
+        color: #495057;
+        font-size: 16px;
+      }
+      
+      .help-section code {
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+      }
+      
+      .help-section ul {
+        margin: 10px 0;
+        padding-left: 20px;
+      }
+      
+      .help-section li {
+        margin: 5px 0;
+        line-height: 1.4;
+      }
+      
+      
+      .delete:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 8px rgba(220,53,69,0.4) !important;
+        background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%) !important;
+      }
+      
+      /* Saved rules card styling */
+      .saved-rule-card {
+        background: white !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        margin-bottom: 12px !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+        transition: all 0.3s ease !important;
+        position: relative !important;
+      }
+      
+      .saved-rule-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important;
+        transform: translateY(-2px) !important;
+        border-color: #007bff !important;
+      }
+      
+      .rule-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: flex-start !important;
+        margin-bottom: 12px !important;
+        gap: 12px !important;
+      }
+      
+      .rule-domain {
+        flex: 1 !important;
+        min-width: 0 !important;
+      }
+      
+      .domain-label {
+        display: block !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #6c757d !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        margin-bottom: 4px !important;
+      }
+      
+      .domain-value {
+        display: block !important;
+        font-family: 'Courier New', monospace !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        color: #495057 !important;
+        background: #f8f9fa !important;
+        padding: 6px 10px !important;
+        border-radius: 6px !important;
+        border: 1px solid #e9ecef !important;
+        word-break: break-all !important;
+        line-height: 1.4 !important;
+      }
+      
+      .rule-ips {
+        margin-top: 8px !important;
+      }
+      
+      .ips-label {
+        display: block !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #6c757d !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        margin-bottom: 4px !important;
+      }
+      
+      .ips-value {
+        display: block !important;
+        font-family: 'Courier New', monospace !important;
+        font-size: 13px !important;
+        color: #495057 !important;
+        background: #f8f9fa !important;
+        padding: 8px 10px !important;
+        border-radius: 6px !important;
+        border: 1px solid #e9ecef !important;
+        word-break: break-all !important;
+        line-height: 1.4 !important;
+        white-space: pre-wrap !important;
+      }
+      
+      .delete-rule-btn {
+        display: inline-block !important;
+        padding: 8px 16px !important;
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+        color: white !important;
+        text-decoration: none !important;
+        border-radius: 8px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        box-shadow: 0 2px 6px rgba(220,53,69,0.3) !important;
+        transition: all 0.3s ease !important;
+        border: none !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+      }
+      
+      .delete-rule-btn:hover {
+        background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(220,53,69,0.4) !important;
+      }
+      
+      .no-rules-message {
+        text-align: center !important;
+        color: #6c757d !important;
+        font-style: italic !important;
+        padding: 40px 20px !important;
+        background: #f8f9fa !important;
+        border-radius: 8px !important;
+        border: 2px dashed #dee2e6 !important;
+        font-size: 14px !important;
+      }
+    </style>
   </head>
   <body>
-    <div align="center" id="message"></div>
+    <div align="center" id="message" class="message" style="display: none;"></div>
+    
     <div id="content">
-    </div>
-    <hr>
-    <div align="center">
-    	<p>
-			<a id="add" href="#">ADD NEW RULE</a> 
-			<a id="save" href="#">SAVE RULES</a>
+      <!-- New rule form -->
+      <div class="rule-item">
+        <p style="margin-bottom: 8px;">
+          <strong>IP Whitelist Rule</strong>
+          <a href="#" class="delete" style="margin-left: auto; float: right;">REMOVE RULE</a>
         </p>
-        <div style="margin-top: 20px; padding: 15px; background: #f0f0f0; border-radius: 8px; text-align: left; max-width: 600px;">
-            <h3>🌐 Wildcard Support</h3>
-            <p><strong>You can use wildcards (*) in domain patterns:</strong></p>
-            <ul>
-                <li><code>*.example.com</code> - Matches all subdomains (api.example.com, www.example.com, etc.)</li>
-                <li><code>example.*</code> - Matches all TLDs (example.com, example.org, example.net, etc.)</li>
-                <li><code>*.example.*</code> - Matches all subdomains and TLDs</li>
-                <li><code>example.com</code> - Exact domain match only</li>
-            </ul>
-            <p><strong>Examples:</strong></p>
-            <ul>
-                <li><code>*.google.com</code> → matches: maps.google.com, drive.google.com, docs.google.com</li>
-                <li><code>*.github.io</code> → matches: username.github.io, project.github.io</li>
-                <li><code>api.*</code> → matches: api.example.com, api.test.org</li>
-            </ul>
+        <div class="op-narrow">
+          <label class="field-label" for="domain_input">Domain/URL</label>
+          <div class="domain-row">
+            <input id="domain_input" type="text" placeholder="e.g., example.com, *.example.com" value="" />
+          </div>
+          <label class="field-label" for="ips_input">Allowed IP Addresses</label>
+          <div class="ips-row">
+            <textarea id="ips_input" placeholder="Enter IP addresses separated by comma (e.g., 192.168.1.1, 10.0.0.1)"></textarea>
+          </div>
+          <small style="color: #6c757d; font-size: 11px;">
+            Use ! before IP to blacklist (e.g., !192.168.1.1)<br>
+            Use * for wildcards (e.g., *.example.com matches all subdomains)
+          </small>
         </div>
+      </div>
+      
+      <!-- Action buttons -->
+      <div style="text-align: center; margin: 15px 0; padding: 12px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;">
+        <a id="add" href="#">ADD NEW RULE</a>
+        <a id="save" href="#">SAVE RULES</a>
+      </div>
+
+      <!-- Saved rules section -->
+      <div class="rule-item" style="text-align:left; overflow-x:hidden; margin-top:12px;">
+        <p style="margin-bottom:8px;"><strong>Saved IP Whitelist Rules</strong></p>
+        <div id="saved_rules_list" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
     </div>
+    
+    <!-- Help section -->
+    <div class="help-section">
+      <h3>🌐 Wildcard Support</h3>
+      <p><strong>You can use wildcards (*) in domain patterns:</strong></p>
+      <ul>
+        <li><code>*.example.com</code> - Matches all subdomains (api.example.com, www.example.com, etc.)</li>
+        <li><code>example.*</code> - Matches all TLDs (example.com, example.org, example.net, etc.)</li>
+        <li><code>*.example.*</code> - Matches all subdomains and TLDs</li>
+        <li><code>example.com</code> - Exact domain match only</li>
+      </ul>
+      <p><strong>Examples:</strong></p>
+      <ul>
+        <li><code>*.google.com</code> → matches: maps.google.com, drive.google.com, docs.google.com</li>
+        <li><code>*.github.io</code> → matches: username.github.io, project.github.io</li>
+        <li><code>api.*</code> → matches: api.example.com, api.test.org</li>
+      </ul>
+    </div>
+    
     <script type="text/javascript" src="../js/settings.js"></script>
     <script type="text/javascript" src="../js/options.js"></script>
   </body>
