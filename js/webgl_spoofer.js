@@ -1,8 +1,54 @@
 (function(){
   'use strict';
 
-  // Early hard gate: if master privacy is off, do nothing
-  try { if (localStorage && localStorage.getItem('ks_privacy_master') === 'off') { return; } } catch(_) {}
+  // Wait for settings to be synced from chrome.storage to localStorage
+  function waitForSettings(callback) {
+    let attempts = 0;
+    const maxAttempts = 50; // 5 seconds max wait
+    
+    function checkSettings() {
+      attempts++;
+      
+      try {
+        // Check if settings have been synced
+        if (localStorage.getItem('ks_settings_synced') === 'true') {
+          // Settings synced, check privacy settings
+          if (localStorage.getItem('ks_privacy_master') === 'off') { 
+            return; // Master privacy off, skip WebGL spoofing
+          }
+          if (localStorage.getItem('ks_webgl_protection') === 'off') { 
+            return; // WebGL protection off, skip WebGL spoofing
+          }
+          callback(); // Settings allow WebGL spoofing, proceed
+          return;
+        }
+        
+        // Settings not synced yet, wait a bit more
+        if (attempts < maxAttempts) {
+          setTimeout(checkSettings, 100);
+        } else {
+          // Timeout reached, check current localStorage values or apply defaults
+          try {
+            if (localStorage.getItem('ks_privacy_master') === 'off') { return; }
+            if (localStorage.getItem('ks_webgl_protection') === 'off') { return; }
+          } catch(_) {}
+          callback(); // Fallback: proceed with spoofing
+        }
+      } catch (e) {
+        // localStorage access failed, proceed with spoofing as fallback
+        if (attempts >= maxAttempts) {
+          callback();
+        } else {
+          setTimeout(checkSettings, 100);
+        }
+      }
+    }
+    
+    checkSettings();
+  }
+  
+  // Wait for settings before proceeding
+  waitForSettings(() => {
 
   if (window.__ksWebglSpoofApplied) return;
   window.__ksWebglSpoofApplied = true;
@@ -201,4 +247,6 @@
       }, writable:false, configurable:false
     });
   }
+  
+  }); // End of waitForSettings callback
 })();

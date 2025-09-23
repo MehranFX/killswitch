@@ -138,3 +138,41 @@ button:disabled {
 
 /* Inline gear icon using mask to allow color control */
 /* removed masked gear icon to show raw image colors */
+
+/* Country flag gradient styles */
+.status-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.status-card[data-country] {
+  background: var(--flag-gradient, #e8f4fd);
+  border-left: 3px solid #3498db;
+  transition: all 0.3s ease;
+}
+
+.status-card[data-country]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Flag gradient animation */
+@keyframes flagWave {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.status-card[data-country]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--flag-gradient, #e8f4fd);
+  background-size: 200% 200%;
+  animation: flagWave 3s ease-in-out infinite;
+  opacity: 0.1;
+  z-index: -1;
+}

@@ -18,6 +18,19 @@
     ], (result) => {
         if (result.privacy_master === false) return; // master off → skip protections
         
+        // Check if any privacy protection is enabled before injecting
+        const hasAnyProtection = result.canvas_protection !== false || 
+                                result.webgl_protection !== false || 
+                                result.audio_protection !== false || 
+                                result.font_protection !== false || 
+                                result.screen_spoofing !== false ||
+                                result.battery_protection !== false || 
+                                result.memory_spoofing !== false || 
+                                result.hardware_spoofing !== false || 
+                                result.language_spoofing !== false;
+        
+        if (!hasAnyProtection) return; // No protections enabled → skip
+        
         // Inject privacy protections into MAIN world
         injectPrivacyProtections(result);
     });
@@ -34,9 +47,22 @@
             const lat = result.latitude || 38.7945952;  // Default: Denver, Colorado
             const lng = result.longitude || -106.5348379;
             
-            // Create external script to inject into MAIN world with coordinates
+            // Pass individual protection settings via URL parameters
+            const protectionParams = [];
+            if (settings.canvas_protection !== false) protectionParams.push('canvas=1');
+            if (settings.webgl_protection !== false) protectionParams.push('webgl=1');
+            if (settings.audio_protection !== false) protectionParams.push('audio=1');
+            if (settings.font_protection !== false) protectionParams.push('font=1');
+            if (settings.screen_spoofing !== false) protectionParams.push('screen=1');
+            if (settings.battery_protection !== false) protectionParams.push('battery=1');
+            if (settings.memory_spoofing !== false) protectionParams.push('memory=1');
+            if (settings.hardware_spoofing !== false) protectionParams.push('hardware=1');
+            if (settings.language_spoofing !== false) protectionParams.push('language=1');
+            
+            // Create external script to inject into MAIN world with coordinates and settings
             const script = document.createElement('script');
-            script.src = chrome.runtime.getURL('js/privacy_inject_main.js') + '#lat=' + lat + '&lng=' + lng;
+            const allParams = ['lat=' + lat, 'lng=' + lng].concat(protectionParams);
+            script.src = chrome.runtime.getURL('js/privacy_inject_main.js') + '#' + allParams.join('&');
             script.onload = function() {
                 // External privacy script loaded successfully
                 script.remove();

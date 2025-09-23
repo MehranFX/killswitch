@@ -40,6 +40,13 @@
         },
         {
             "matches": ["<all_urls>"],
+            "js": ["js/privacy_sync.js"],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "ISOLATED"
+        },
+        {
+            "matches": ["<all_urls>"],
             "js": ["js/privacy_protection.js"],
             "run_at": "document_start",
             "all_frames": true,
@@ -81,7 +88,7 @@
 	],
 	"action": {
 		"default_icon": "/img/icon-48x48-grey.png",
-		"default_popup": "/html/popup.html",
+		"default_popup": "/html/popup_new.html",
 		"default_title": "Real Kill Switch"
 	},
 	"content_security_policy": {

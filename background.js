@@ -4,6 +4,32 @@
  * Enhanced background script with better error handling and async operations
  */
 
+// User-Agent strings for different browsers and platforms
+const USER_AGENTS = {
+    // Windows
+    chrome_win: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    firefox_win: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    edge_win: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+    
+    // macOS
+    chrome_mac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    firefox_mac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0',
+    safari_mac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+    
+    // Linux
+    chrome_linux: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    firefox_linux: 'Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    
+    // Mobile
+    chrome_android: 'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    safari_ios: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
+    samsung_android: 'Mozilla/5.0 (Linux; Android 14; SAMSUNG SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.0.0 Mobile Safari/537.36',
+    
+    // Bots
+    googlebot: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+    bingbot: 'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)'
+};
+
 // Utility classes (copied from utils.js for service worker compatibility)
 class ValidationUtils {
     static isValidIPv4(ip) {
@@ -2680,6 +2706,71 @@ function FindProxyForURL(url, host) {
     }
 
     /**
+     * Setup User-Agent spoofing using DeclarativeNetRequest
+     */
+    static async setupUserAgentSpoofing() {
+        try {
+            const data = await chrome.storage.local.get(['user_agent_type', 'custom_user_agent']);
+            const userAgentType = data.user_agent_type || 'default';
+            const customUserAgent = data.custom_user_agent || '';
+            
+            // Get current User-Agent rules (if any)
+            const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+            const userAgentRuleIds = existingRules
+                .filter(rule => rule.id >= 90000 && rule.id < 91000)
+                .map(rule => rule.id);
+            
+            // Remove existing User-Agent rules
+            if (userAgentRuleIds.length > 0) {
+                await chrome.declarativeNetRequest.updateDynamicRules({
+                    removeRuleIds: userAgentRuleIds
+                });
+            }
+            
+            // If default, don't add any rules
+            if (userAgentType === 'default') {
+                return;
+            }
+            
+            // Determine User-Agent string
+            let userAgentString = '';
+            if (userAgentType === 'custom') {
+                userAgentString = customUserAgent;
+            } else {
+                userAgentString = USER_AGENTS[userAgentType];
+            }
+            
+            if (!userAgentString) {
+                return; // Invalid User-Agent type or empty custom string
+            }
+            
+            // Add new User-Agent rule
+            const rule = {
+                id: 90001,
+                priority: 1,
+                action: {
+                    type: 'modifyHeaders',
+                    requestHeaders: [{
+                        header: 'User-Agent',
+                        operation: 'set',
+                        value: userAgentString
+                    }]
+                },
+                condition: {
+                    resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest', 'script', 'stylesheet', 'image', 'font', 'object', 'media', 'websocket', 'other']
+                }
+            };
+            
+            await chrome.declarativeNetRequest.updateDynamicRules({
+                addRules: [rule]
+            });
+            
+        } catch (error) {
+            await ErrorHandler.handle(error, 'setupUserAgentSpoofing');
+        }
+    }
+
+    /**
      * Handle messages from other parts of the extension
      * @param {Object} request - Message request
      * @param {Object} sender - Message sender
@@ -2760,6 +2851,20 @@ function FindProxyForURL(url, host) {
                                 const data = await chrome.storage.local.get(['ip_flag']);
                                 if (data.ip_flag) await IconManager.updateIcon(data.ip_flag);
                             }
+                            sendResponse({ success: true });
+                        } catch (error) {
+                            sendResponse({ success: false, error: error.message });
+                        }
+                        break;
+                        
+                    case 'updateUserAgent':
+                        try {
+                            const { userAgentType, customUserAgent } = request;
+                            await chrome.storage.local.set({ 
+                                user_agent_type: userAgentType,
+                                custom_user_agent: customUserAgent || ''
+                            });
+                            await this.setupUserAgentSpoofing();
                             sendResponse({ success: true });
                         } catch (error) {
                             sendResponse({ success: false, error: error.message });
@@ -3156,7 +3261,7 @@ class IconManager {
         return new Blob([byteArray], { type: mime });
     }
 }
-// Listen storage change for ip_flag and icon_type
+// Listen storage change for ip_flag, icon_type, and user_agent settings
 chrome.storage.onChanged.addListener(async (changes) => {
     try {
         if (changes.icon_type) {
@@ -3174,5 +3279,15 @@ chrome.storage.onChanged.addListener(async (changes) => {
                 await IconManager.updateIcon(changes.ip_flag.newValue);
             }
         }
+        if (changes.user_agent_type || changes.custom_user_agent) {
+            await BackgroundManager.setupUserAgentSpoofing();
+        }
     } catch (_) {}
 });
+
+// Initialize User-Agent spoofing on startup
+(async () => {
+    try {
+        await BackgroundManager.setupUserAgentSpoofing();
+    } catch (_) {}
+})();

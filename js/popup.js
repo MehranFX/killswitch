@@ -376,6 +376,8 @@ class PopupManager {
             if (ipElement) {
                 const oldText = ipElement.textContent;
                 ipElement.textContent = `${flag ? flag + ' ' : ''}${ip || 'Loading...'}`;
+                // Ensure background stays transparent
+                ipElement.style.background = 'transparent';
                 // Log removed
                 
                 // Highlight only when explicitly requested (end of refresh)
@@ -383,8 +385,8 @@ class PopupManager {
                     ipElement.style.backgroundColor = '#4CAF50';
                     ipElement.style.color = 'white';
                     setTimeout(() => {
-                        ipElement.style.backgroundColor = '#f0f0f0';
-                        ipElement.style.color = 'black';
+                        ipElement.style.backgroundColor = 'transparent';
+                        ipElement.style.color = '#667eea';
                     }, 1500);
                 }
             } else {
@@ -484,12 +486,7 @@ class PopupManager {
             const timeUntilUpdate = updateInterval - timeSinceUpdate;
 
             // Countdown update
-            console.log({
-                timeSinceUpdate: Math.floor(timeSinceUpdate / 1000) + 's',
-                timeUntilUpdate: Math.floor(timeUntilUpdate / 1000) + 's',
-                isRefreshing: this.isRefreshing,
-                storageKeys: result
-            });
+            // removed debug log
 
             if (timeUntilUpdate <= 0) {
                 countdownElement.textContent = '00:00';

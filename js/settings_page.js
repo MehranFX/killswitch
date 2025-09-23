@@ -8,7 +8,7 @@
       'battery_protection','memory_spoofing','hardware_spoofing','language_spoofing','dnt_header',
       'referrer_control','storage_protection','cookie_protection','block_ping',
       'ip_leak_detection','fingerprint_randomization','network_spoofing','media_spoofing','timing_protection','flash_protection',
-      'icon_type','privacy_master'
+      'icon_type','privacy_master','user_agent_type','custom_user_agent'
     ]);
     
     const input = document.getElementById('fallback_proxy');
@@ -35,6 +35,15 @@
     const iconType = document.getElementById('icon_type');
     if(iconType){ iconType.value = data.icon_type || 'country_flag' }
     
+    // User-Agent settings
+    const userAgentType = document.getElementById('user_agent_type');
+    if(userAgentType){ 
+      userAgentType.value = data.user_agent_type || 'default';
+      toggleCustomUserAgent(data.user_agent_type);
+    }
+    const customUserAgent = document.getElementById('custom_user_agent');
+    if(customUserAgent){ customUserAgent.value = data.custom_user_agent || '' }
+    
     // Master toggle
     const master = document.getElementById('privacy_master');
     if(master){
@@ -57,7 +66,20 @@
     
     privacySettings.forEach(setting => {
       const element = document.getElementById(setting);
-      if(element){ element.checked = data[setting] !== false } // Default to true unless explicitly false
+      if(element){ 
+        element.checked = data[setting] !== false; // Default to true unless explicitly false
+        
+        // Mirror important settings to localStorage on load
+        try {
+          if (setting === 'webgl_protection') {
+            localStorage.setItem('ks_webgl_protection', element.checked ? 'on' : 'off');
+          } else if (setting === 'canvas_protection') {
+            localStorage.setItem('ks_canvas_protection', element.checked ? 'on' : 'off');
+          } else if (setting === 'audio_protection') {
+            localStorage.setItem('ks_audio_protection', element.checked ? 'on' : 'off');
+          }
+        } catch(_) {}
+      }
     });
   }
 
@@ -65,6 +87,13 @@
     const customFields = document.getElementById('custom_location_fields');
     if (customFields) {
       customFields.style.display = config === 'custom' ? 'block' : 'none';
+    }
+  }
+
+  function toggleCustomUserAgent(type) {
+    const customField = document.getElementById('custom_user_agent_field');
+    if (customField) {
+      customField.style.display = type === 'custom' ? 'block' : 'none';
     }
   }
 
@@ -144,6 +173,12 @@
     const iconTypeEl = document.getElementById('icon_type');
     const iconType = iconTypeEl ? iconTypeEl.value : 'country_flag';
     
+    // User-Agent settings
+    const userAgentTypeEl = document.getElementById('user_agent_type');
+    const userAgentType = userAgentTypeEl ? userAgentTypeEl.value : 'default';
+    const customUserAgentEl = document.getElementById('custom_user_agent');
+    const customUserAgent = customUserAgentEl ? customUserAgentEl.value : '';
+    
     let timezone = '', locale = '', latitude = '', longitude = '';
     
     if (config === 'custom') {
@@ -197,10 +232,32 @@
       latitude: latitude,
       longitude: longitude,
       icon_type: iconType,
+      user_agent_type: userAgentType,
+      custom_user_agent: customUserAgent,
       privacy_master: (document.getElementById('privacy_master')?.checked !== false),
       ...privacyData
     });
-    try { localStorage.setItem('ks_privacy_master', (document.getElementById('privacy_master')?.checked !== false) ? 'on' : 'off'); } catch(_) {}
+    
+    // Mirror important privacy settings to localStorage for synchronous access
+    try { 
+      localStorage.setItem('ks_privacy_master', (document.getElementById('privacy_master')?.checked !== false) ? 'on' : 'off');
+      
+      // Mirror individual privacy settings
+      const webglEl = document.getElementById('webgl_protection');
+      if (webglEl) {
+        localStorage.setItem('ks_webgl_protection', webglEl.checked ? 'on' : 'off');
+      }
+      
+      const canvasEl = document.getElementById('canvas_protection');
+      if (canvasEl) {
+        localStorage.setItem('ks_canvas_protection', canvasEl.checked ? 'on' : 'off');
+      }
+      
+      const audioEl = document.getElementById('audio_protection');
+      if (audioEl) {
+        localStorage.setItem('ks_audio_protection', audioEl.checked ? 'on' : 'off');
+      }
+    } catch(_) {}
     
     // Apply WebRTC policy immediately via background script
     try {
@@ -241,8 +298,22 @@
       // ignore response
     } catch (_) {}
     
+    // Apply User-Agent change via background
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'updateUserAgent',
+        userAgentType: userAgentType,
+        customUserAgent: customUserAgent
+      });
+      // ignore response
+    } catch (_) {}
+    
     const msg = document.getElementById('message');
-    if(msg){ msg.textContent = 'Saved'; msg.style.display = 'block'; setTimeout(()=> msg.style.display='none', 2000); }
+    if(msg){ 
+      msg.textContent = '✅ Settings saved successfully!'; 
+      msg.classList.add('show'); 
+      setTimeout(()=> msg.classList.remove('show'), 3000); 
+    }
   }
 
   function setChildrenDisabled(disabled){
@@ -265,6 +336,14 @@
     if(locationConfig){ 
       locationConfig.addEventListener('change', (e) => {
         toggleCustomFields(e.target.value);
+      });
+    }
+
+    // User-Agent config change handler
+    const userAgentType = document.getElementById('user_agent_type');
+    if(userAgentType){ 
+      userAgentType.addEventListener('change', (e) => {
+        toggleCustomUserAgent(e.target.value);
       });
     }
 
