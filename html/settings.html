@@ -291,6 +291,39 @@
           flex-direction: column;
         }
       }
+      
+      /* Small icon buttons for Donate actions */
+      .icon-btn {
+        width: 36px;
+        height: 36px;
+        border: none;
+        background: #e9ecef;
+        border-radius: 8px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all .2s ease;
+      }
+      .icon-btn:hover { background: #dee2e6; transform: translateY(-1px); }
+      .icon-btn svg { width: 18px; height: 18px; opacity: .9; }
+      .icon-btn:hover svg { opacity: 1; }
+
+      /* Coin icons */
+      .coin-icon { 
+        width: 44px; height: 44px; 
+        display:inline-flex; align-items:center; justify-content:center; 
+        vertical-align:middle; border-radius:50%; 
+        box-shadow: 0 2px 6px rgba(0,0,0,.18), inset 0 0 0 2px rgba(255,255,255,.65);
+      }
+      .coin-icon img { width: 44px; height: 44px; display:block; object-fit: contain; }
+      .coin-title { display:flex; align-items:center; gap:12px; font-size:1.08rem; color:#2c3e50; font-weight:600; }
+
+      /* Gradients per coin */
+      .coin-btc { background: linear-gradient(135deg, #F7931A, #FFB347); }
+      .coin-eth { background: linear-gradient(135deg, #627EEA, #8aa6ff); }
+      .coin-bsc { background: linear-gradient(135deg, #F3BA2F, #ffd666); }
+      .coin-trx { background: linear-gradient(135deg, #E50913, #ff6b6b); }
     </style>
   </head>
   <body>
@@ -307,6 +340,7 @@
           <button class="tab-button active" data-tab="general">🌐 General</button>
           <button class="tab-button" data-tab="privacy">🛡️ Privacy</button>
           <button class="tab-button" data-tab="advanced">⚡ Advanced</button>
+          <button class="tab-button" data-tab="donate">💝 Donate</button>
         </div>
         
         <!-- General Tab -->
@@ -658,11 +692,91 @@
             </div>
           </div>
         </div>
+
+        <!-- Donate Tab -->
+        <div class="tab-content" id="donate">
+          <div class="setting-group">
+            <h3>💝 Support Development</h3>
+            <p>If this extension is helpful, you can donate using the networks below. Each address can be copied, and you can also view its QR code.</p>
+          </div>
+
+          <div class="setting-group">
+            <h3 class="coin-title"><span class="coin-icon coin-btc" aria-hidden="true"><img src="../img/btc.svg" alt="Bitcoin" /></span>Bitcoin (BTC)</h3>
+            <div class="form-row" style="align-items:center;">
+              <input id="don_btc" class="form-control" value="bc1qexamplebtcaddress0000000000000000000" readonly>
+              <div style="display:flex;gap:8px;">
+                <button class="icon-btn" type="button" data-copy="#don_btc" title="Copy">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+                <button class="icon-btn" type="button" data-qr="#don_btc" title="QR Code">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM17 14v3M14 17h3M17 17h4M21 17v4"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3 class="coin-title"><span class="coin-icon coin-eth" aria-hidden="true"><img src="../img/eth.svg" alt="Ethereum" /></span>Ethereum (ETH)</h3>
+            <div class="form-row" style="align-items:center;">
+              <input id="don_eth" class="form-control" value="0x1111222233334444555566667777888899990000" readonly>
+              <div style="display:flex;gap:8px;">
+                <button class="icon-btn" type="button" data-copy="#don_eth" title="Copy">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+                <button class="icon-btn" type="button" data-qr="#don_eth" title="QR Code">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM17 14v3M14 17h3M17 17h4M21 17v4"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3 class="coin-title"><span class="coin-icon coin-bsc" aria-hidden="true"><img src="../img/bnb.svg" alt="BNB Smart Chain" /></span>BNB Smart Chain (BSC)</h3>
+            <div class="form-row" style="align-items:center;">
+              <input id="don_bsc" class="form-control" value="0xaaaabbbbccccddddeeeeffff1111222233334444" readonly>
+              <div style="display:flex;gap:8px;">
+                <button class="icon-btn" type="button" data-copy="#don_bsc" title="Copy">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+                <button class="icon-btn" type="button" data-qr="#don_bsc" title="QR Code">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM17 14v3M14 17h3M17 17h4M21 17v4"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3 class="coin-title"><span class="coin-icon coin-trx" aria-hidden="true"><img src="../img/trx.svg" alt="Tron" /></span>Tron (TRX)</h3>
+            <div class="form-row" style="align-items:center;">
+              <input id="don_trx" class="form-control" value="TP1exampleTRONaddress99999999999999999" readonly>
+              <div style="display:flex;gap:8px;">
+                <button class="icon-btn" type="button" data-copy="#don_trx" title="Copy">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+                <button class="icon-btn" type="button" data-qr="#don_trx" title="QR Code">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM17 14v3M14 17h3M17 17h4M21 17v4"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- QR Modal -->
+          <div id="qr_modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:10000;">
+            <div id="qr_dialog" style="background:white;padding:20px;border-radius:12px;min-width:220px;box-shadow:0 10px 30px rgba(0,0,0,.2);text-align:center;">
+              <div id="qr_title" style="font-weight:600;margin-bottom:10px;color:#2c3e50;">QR Code</div>
+              <img id="qr_image" alt="QR" style="width:200px;height:200px;object-fit:contain;border:1px solid #e9ecef;border-radius:8px;" />
+              <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
+                <button id="qr_close" type="button" class="tab-button active" style="background:white;">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
         
         <button id="save_settings" class="save-button">💾 Save Settings</button>
       </div>
     </div>
     
+    <script type="text/javascript" src="../js/qrgen.min.js"></script>
     <script type="text/javascript" src="../js/settings_tabs.js"></script>
     <script type="text/javascript" src="../js/settings.js"></script>
     <script type="text/javascript" src="../js/settings_page.js"></script>
