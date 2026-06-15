@@ -88,10 +88,10 @@ class ValidationUtils {
 class IPUtils {
     static IP_SERVICES = [
         'https://api.ipify.org',
-        'https://ipapi.co/ip/',
         'https://ifconfig.me/ip',
+        'https://icanhazip.com',
         'https://ipinfo.io/ip',
-        'https://icanhazip.com'
+        'https://ipapi.co/ip/'
     ];
 
     static IP_CACHE_DURATION = 30 * 1000; // 30 seconds
@@ -167,44 +167,50 @@ class IPUtils {
         }
     }
 
+    static async _fetchCountryCodeFromEndpoint(ip, url) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(url, {
+            signal: controller.signal,
+            headers: { 'Cache-Control': 'no-cache' },
+            cache: 'no-store'
+        });
+        clearTimeout(timeout);
+        if (!response.ok) return null;
+
+        if (url.includes('ipwho.is')) {
+            const data = await response.json();
+            const country = data.country_code || '';
+            return country.length === 2 ? country.toUpperCase() : null;
+        }
+        if (url.includes('ip-api.com')) {
+            const data = await response.json();
+            if (data.status === 'success' && data.countryCode) {
+                return data.countryCode.toUpperCase();
+            }
+            return null;
+        }
+
+        const country = (await response.text()).trim();
+        return country.length === 2 ? country.toUpperCase() : null;
+    }
+
     static async getCountryFromIP(ip) {
         const endpoints = [
-            `https://ipapi.co/${ip}/country/`,
-            `https://ipinfo.io/${ip}/country`,
-            `https://ipwho.is/${ip}`
+            `https://ipwho.is/${ip}`,
+            `http://ip-api.com/json/${ip}?fields=status,countryCode`,
+            `https://ipapi.co/${ip}/country/`
         ];
-        
+
         for (const url of endpoints) {
             try {
-                // Trying country endpoint
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 5000);
-                const response = await fetch(url, { 
-                    signal: controller.signal,
-                    headers: { 'Cache-Control': 'no-cache' }
-                });
-                clearTimeout(timeout);
-                
-                if (response.ok) {
-                    let country = '';
-                    if (url.includes('ipwho.is')) {
-                        const data = await response.json();
-                        country = data.country_code || '';
-                    } else {
-                        country = (await response.text()).trim();
-                    }
-                    
-                    if (country && country.length === 2) {
-                        // Country detected
-                        return country.toUpperCase();
-                    }
-                }
-            } catch (error) {
-                // Failed to get country from endpoint
+                const country = await this._fetchCountryCodeFromEndpoint(ip, url);
+                if (country) return country;
+            } catch (_) {
+                // try next endpoint
             }
         }
-        
-        // Failed to get country from all endpoints
+
         return null;
     }
 
@@ -232,32 +238,8 @@ class IPUtils {
      * Get country code for an IP (e.g., "US")
      */
     static async getCountryCode(ip) {
-        const endpoints = [
-            `https://ipapi.co/${ip}/country/`,
-            `https://ipinfo.io/${ip}/country`,
-            `https://ipwho.is/${ip}`
-        ];
-        for (const url of endpoints) {
-            try {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 5000);
-                const res = await fetch(url, { signal: controller.signal });
-                clearTimeout(timeout);
-                if (!res.ok) continue;
-                if (url.includes('ipwho.is')) {
-                    const data = await res.json();
-                    if (data && data.success && data.country_code) {
-                        return (data.country_code || '').toUpperCase();
-                    }
-                } else {
-                    const text = (await res.text()).trim();
-                    if (text && text.length <= 3) return text.toUpperCase();
-                }
-            } catch (_) {
-                // ignore and try next
-            }
-        }
-        return '';
+        const country = await this.getCountryFromIP(ip);
+        return country || '';
     }
 
     /**
@@ -2300,7 +2282,7 @@ function FindProxyForURL(url, host) {
     var whitelistData = ${whitelistDataStr};
     var currentIP = "${currentIP}";
     var fallbackProxy = ${JSON.stringify(fallbackProxy)};
-    var ipCheckHosts = ["api.ipify.org","ipapi.co","ipinfo.io","icanhazip.com","ifconfig.me"];
+    var ipCheckHosts = ["api.ipify.org","ipwho.is","ip-api.com","ipapi.co","icanhazip.com","ifconfig.me"];
     
     // Check if this is already our blocked page - allow it
     if (url.indexOf("${blockedPageUrl}") === 0) {
