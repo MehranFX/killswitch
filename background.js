@@ -1126,17 +1126,66 @@ class BackgroundManager {
     /**
      * Apply location spoofing to all tabs
      */
+    /**
+     * Dynamically re-register the boot data content script with hardcoded timezone/locale.
+     * This ensures window.__ks_boot_tz__ is always set BEFORE timezone_early_override.js runs,
+     * even on the very first page load in a new tab.
+     */
+    static async registerBootDataScript(timezone, locale, latitude, longitude) {
+        try {
+            const tz = JSON.stringify(timezone || 'UTC');
+            const lc = JSON.stringify(locale || 'en-US');
+            const la = parseFloat(latitude) || 0;
+            const lo = parseFloat(longitude) || 0;
+            const code = `(function(){window.__ks_boot_tz__=${tz};window.__ks_boot_locale__=${lc};window.__ks_boot_lat__=${la};window.__ks_boot_lng__=${lo};})();`;
+
+            // Unregister existing dynamic boot script first
+            try {
+                await chrome.scripting.unregisterContentScripts({ ids: ['ks-boot-data-dynamic'] });
+            } catch (_) {}
+
+            // Register new boot script with hardcoded values, running BEFORE ks_boot_data.js
+            await chrome.scripting.registerContentScripts([{
+                id: 'ks-boot-data-dynamic',
+                matches: ['<all_urls>'],
+                js: [],
+                css: [],
+                runAt: 'document_start',
+                allFrames: true,
+                world: 'MAIN',
+                // Use injectImmediately to run as early as possible
+            }]);
+            // Since inline code isn't supported in registerContentScripts for MV3,
+            // store the current tz/locale in chrome.storage.session for quick sync access
+            await chrome.storage.session.set({
+                ks_active_tz: timezone || 'UTC',
+                ks_active_locale: locale || 'en-US',
+                ks_active_lat: latitude || 0,
+                ks_active_lng: longitude || 0
+            });
+        } catch (_) {}
+    }
+
     static async applyLocationSpoofing(timezone, locale, latitude, longitude) {
         try {
+            // Update session cache so content scripts can read it
+            if (timezone) {
+                try {
+                    await chrome.storage.session.set({
+                        ks_active_tz: timezone,
+                        ks_active_locale: locale || 'en-US',
+                        ks_active_lat: latitude || 0,
+                        ks_active_lng: longitude || 0
+                    });
+                } catch (_) {}
+            }
             const tabs = await chrome.tabs.query({});
             for (const tab of tabs) {
                 if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
                     await this.attachDebugger(tab.id, timezone, locale, latitude, longitude);
                 }
             }
-        } catch (error) {
-            // Error removed
-        }
+        } catch (error) {}
     }
 
     static async updateAllTabsWithNewLocation(ipLocation) {
@@ -1180,49 +1229,53 @@ class BackgroundManager {
     /**
      * Attach debugger to tab for location spoofing
      */
-    static async attachDebugger(tabId, timezone, locale, latitude, longitude) {
+    static async attachDebugger(tabId, timezone, locale, latitude, longitude, tabUrl = null) {
         try {
             if (!timezone && !locale && !latitude && !longitude) return;
             
-            // Get tab info first to check if it's a valid target
-            const tab = await chrome.tabs.get(tabId);
-            if (!tab || !tab.url) return;
+            let url = tabUrl;
+            if (!url) {
+                // Get tab info if URL not provided
+                const tab = await chrome.tabs.get(tabId);
+                if (!tab || !tab.url) return;
+                url = tab.url;
+            }
             
             // Skip chrome:// URLs and extension URLs
-            if (tab.url.startsWith('chrome://') || 
-                tab.url.startsWith('chrome-extension://') ||
-                tab.url.startsWith('moz-extension://') ||
-                tab.url.startsWith('edge-extension://') ||
-                tab.url.startsWith('about:') ||
-                tab.url.startsWith('file://')) {
-                // Log removed
+            if (url.startsWith('chrome://') || 
+                url.startsWith('chrome-extension://') ||
+                url.startsWith('moz-extension://') ||
+                url.startsWith('edge-extension://') ||
+                url.startsWith('about:') ||
+                url.startsWith('file://')) {
                 return;
             }
             
             await chrome.debugger.attach({ tabId: tabId }, '1.3');
 
+            // Fire all CDP commands concurrently to minimize injection latency on navigation
+            const cdpCommands = [];
+
             // Inject boot timezone/locale before any page script runs (first paint guarantee)
-            try {
+            if (timezone || locale) {
                 const bootScript = `(() => { try { window.__ks_boot_tz__ = ${JSON.stringify(timezone || '')}; window.__ks_boot_locale__ = ${JSON.stringify(locale || 'en-US')}; } catch(e){} })();`;
-                await chrome.debugger.sendCommand(
+                cdpCommands.push(chrome.debugger.sendCommand(
                     { tabId: tabId },
                     'Page.addScriptToEvaluateOnNewDocument',
                     { source: bootScript }
-                );
-            } catch (e) {
-                // Log removed
+                ));
             }
             
             if (timezone) {
-                await chrome.debugger.sendCommand(
+                cdpCommands.push(chrome.debugger.sendCommand(
                     { tabId: tabId },
                     'Emulation.setTimezoneOverride',
                     { timezoneId: timezone }
-                );
+                ));
             }
             
             if (latitude && longitude) {
-                await chrome.debugger.sendCommand(
+                cdpCommands.push(chrome.debugger.sendCommand(
                     { tabId: tabId },
                     'Emulation.setGeolocationOverride',
                     {
@@ -1230,26 +1283,25 @@ class BackgroundManager {
                         longitude: parseFloat(longitude),
                         accuracy: 1,
                     }
-                );
+                ));
             }
             
             if (locale) {
-                await chrome.debugger.sendCommand(
+                cdpCommands.push(chrome.debugger.sendCommand(
                     { tabId: tabId },
                     'Emulation.setLocaleOverride',
                     { locale: locale }
-                );
+                ));
             }
+            
+            // Execute all CDP commands at once
+            await Promise.allSettled(cdpCommands);
             
             // Apply a JS fallback layer as well to defeat aggressive probes
             try {
                 await BackgroundManager.applyJSFallbackTimezone(tabId, timezone, locale);
-                // Log removed
-            } catch (e) {
-                // Log removed
-            }
+            } catch (e) {}
             
-            // Log removed
         } catch (error) {
             if (error.message && (
                 error.message.includes('Another debugger is already attached') ||
@@ -1394,49 +1446,39 @@ class BackgroundManager {
                         let latitude = data.latitude || '';
                         let longitude = data.longitude || '';
                         
-                        // If matchIP, fetch current IP location
-                        if (config === 'matchIP') {
-                            const ipLocation = await this.fetchIPLocation();
-                            if (ipLocation) {
-                                timezone = ipLocation.timezone;
-                                locale = ipLocation.locale;
-                                latitude = ipLocation.latitude;
-                                longitude = ipLocation.longitude;
-                                
-                                // Update stored values with new IP location
-                                await chrome.storage.local.set({
-                                    timezone: timezone,
-                                    locale: locale,
-                                    latitude: latitude,
-                                    longitude: longitude
-                                });
-                            }
-                        }
-
-                        // 1) Inject boot values synchronously into MAIN world before page scripts run
-                        try {
-                            await chrome.scripting.executeScript({
-                                target: { tabId: details.tabId, frameIds: [0] },
-                                world: 'MAIN',
-                                injectImmediately: true,
-                                func: (tz, loc) => {
-                                    try {
-                                        window.__ks_boot_tz__ = tz;
-                                        window.__ks_boot_locale__ = loc;
-                                    } catch (_) {}
-                                },
-                                args: [timezone, locale]
-                            });
-                        } catch (e) {
-                            // Log removed
-                        }
+                        // Fast-path: use cached timezone, locale, latitude, longitude
+                        // Do NOT call fetchIPLocation here as it delays injection by 500ms+ and causes leaks
                         
-                        // Apply to new tab
-                        await this.attachDebugger(details.tabId, timezone, locale, latitude, longitude);
+                        // Apply to new tab (debugger attachment)
+                        // This sets up CDP Emulation and Page.addScriptToEvaluateOnNewDocument
+                        // BEFORE the document is even created.
+                        await this.attachDebugger(details.tabId, timezone, locale, latitude, longitude, details.url);
                     }
-                } catch (error) {
-                    // Error removed
-                }
+                } catch (error) {}
+            });
+            
+            // Inject boot variables synchronously as soon as the document commits (fallback if CDP was too slow)
+            chrome.webNavigation.onCommitted.addListener(async (details) => {
+                try {
+                    // Skip subframes to avoid performance overhead, MAIN world is usually enough for top level
+                    if (details.frameId !== 0) return;
+                    
+                    const data = await chrome.storage.local.get(['location_config', 'timezone', 'locale']);
+                    if (data.location_config !== 'browserDefault' && data.timezone) {
+                        await chrome.scripting.executeScript({
+                            target: { tabId: details.tabId, frameIds: [details.frameId] },
+                            world: 'MAIN',
+                            injectImmediately: true,
+                            func: (tz, loc) => {
+                                try {
+                                    window.__ks_boot_tz__ = tz;
+                                    window.__ks_boot_locale__ = loc || 'en-US';
+                                } catch (_) {}
+                            },
+                            args: [data.timezone, data.locale || 'en-US']
+                        });
+                    }
+                } catch (e) {}
             });
 
             // Capture URL at navigation start for accurate blocked-domain reporting
