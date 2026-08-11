@@ -3132,9 +3132,22 @@ chrome.storage.onChanged.addListener(async (changes) => {
     } catch (_) {}
 });
 
+// Enforce WebRTC policy synchronously on service worker evaluation to prevent initial load leaks
+try {
+    if (chrome.privacy && chrome.privacy.network) {
+        if (chrome.privacy.network.webRTCIPHandlingPolicy) {
+            chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: 'disable_non_proxied_udp' });
+        }
+        if (chrome.privacy.network.webRTCMultipleRoutesEnabled) {
+            chrome.privacy.network.webRTCMultipleRoutesEnabled.set({ value: false });
+        }
+    }
+} catch (_) {}
+
 // Initialize User-Agent spoofing on startup
 (async () => {
     try {
         await BackgroundManager.setupUserAgentSpoofing();
+        await BackgroundManager.initializeWebRTC();
     } catch (_) {}
 })();

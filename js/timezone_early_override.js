@@ -9,15 +9,14 @@
         : null;
 
     function getActiveTimezone() {
-        if (window.__ks_boot_tz__) return window.__ks_boot_tz__;
-        if (originalResolvedOptions) {
-            try {
-                const opt = originalResolvedOptions.call(new window.Intl.DateTimeFormat());
-                if (opt && opt.timeZone) {
-                    return opt.timeZone;
-                }
-            } catch (_) {}
+        if (window.__ks_boot_tz__) {
+            try { localStorage.setItem('__ks_cached_tz__', window.__ks_boot_tz__); } catch (_) {}
+            return window.__ks_boot_tz__;
         }
+        try {
+            const cached = localStorage.getItem('__ks_cached_tz__');
+            if (cached) return cached;
+        } catch (_) {}
         return 'UTC';
     }
 
