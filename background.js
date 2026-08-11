@@ -945,20 +945,16 @@ class BackgroundManager {
      */
     static async initializeWebRTC() {
         try {
-            // Get stored WebRTC policy or use default
             const data = await chrome.storage.local.get(['webrtc_policy']);
-            const policy = data.webrtc_policy || 'default_public_interface_only';
+            const policy = data.webrtc_policy || 'disable_non_proxied_udp';
             
-            // Apply WebRTC policy
             if (chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy) {
                 await chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: policy });
-                // Log removed
-            } else {
-                // Log removed
             }
-        } catch (error) {
-            // Error removed
-        }
+            if (chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCMultipleRoutesEnabled) {
+                await chrome.privacy.network.webRTCMultipleRoutesEnabled.set({ value: false });
+            }
+        } catch (error) {}
     }
 
     /**
@@ -1752,7 +1748,7 @@ class BackgroundManager {
                 // Limit WebRTC with privacy API where available
                 if (chrome.privacy && chrome.privacy.network) {
                     if (chrome.privacy.network.webRTCIPHandlingPolicy) {
-                        chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: 'default_public_interface_only' });
+                        chrome.privacy.network.webRTCIPHandlingPolicy.set({ value: 'disable_non_proxied_udp' });
                     }
                     if (chrome.privacy.network.webRTCMultipleRoutesEnabled) {
                         chrome.privacy.network.webRTCMultipleRoutesEnabled.set({ value: false });
