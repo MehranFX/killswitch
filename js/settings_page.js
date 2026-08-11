@@ -99,15 +99,23 @@
 
   async function fetchIPLocation() {
     try {
-      const response = await fetch('http://ip-api.com/json?fields=status,message,countryCode,lat,lon,timezone,query');
-      const data = await response.json();
-      if (data.status === 'success') {
-        return {
-          timezone: data.timezone,
-          locale: getLocaleFromCountryCode(data.countryCode),
-          latitude: data.lat,
-          longitude: data.lon
-        };
+      const response = await fetch('https://ipwho.is/');
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.success !== false) {
+          const tz = data.timezone?.id || data.timezone;
+          const cc = data.country_code || data.countryCode;
+          const lat = data.latitude !== undefined ? data.latitude : data.lat;
+          const lon = data.longitude !== undefined ? data.longitude : data.lon;
+          if (tz && lat !== undefined && lon !== undefined) {
+            return {
+              timezone: tz,
+              locale: getLocaleFromCountryCode(cc),
+              latitude: lat,
+              longitude: lon
+            };
+          }
+        }
       }
     } catch (error) {
       // Error removed

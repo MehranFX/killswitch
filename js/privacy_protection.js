@@ -509,25 +509,19 @@
     
     function spoofLanguageAndPlatform() {
         try {
+            const loc = window.__ks_boot_locale__ || 'it-IT';
+            const baseLang = loc.split('-')[0] || 'it';
+            const languagesList = Array.from(new Set([loc, baseLang, 'en-US', 'en']));
+
             Object.defineProperty(navigator, 'language', { 
-                value: 'en-US', 
-                writable: false,
-                configurable: false
+                get: () => loc,
+                configurable: true
             });
             Object.defineProperty(navigator, 'languages', { 
-                value: ['en-US', 'en'], 
-                writable: false,
-                configurable: false
+                get: () => languagesList,
+                configurable: true
             });
-            Object.defineProperty(navigator, 'platform', { 
-                value: 'Win32', 
-                writable: false,
-                configurable: false
-            });
-            // Log removed
-        } catch (e) {
-            // Log removed
-        }
+        } catch (e) {}
     }
     
     function enableDoNotTrack() {
@@ -623,23 +617,24 @@
     
     function randomizeFingerprint() {
         try {
-            // Randomize user agent slightly
-            const userAgents = [
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            ];
+            // Keep userAgent aligned with native platform to avoid OS/Platform mismatch flags
+            const currentPlatform = navigator.platform || 'Linux x86_64';
+            let matchedUA = navigator.userAgent;
             
-            const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+            if (currentPlatform.includes('Win')) {
+                matchedUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+            } else if (currentPlatform.includes('Mac')) {
+                matchedUA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+            } else if (currentPlatform.includes('Linux')) {
+                matchedUA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+            }
+            
             Object.defineProperty(navigator, 'userAgent', {
-                value: randomUA,
+                value: matchedUA,
                 writable: false,
-                configurable: false
+                configurable: true
             });
-            // Log removed
-        } catch (e) {
-            // Log removed
-        }
+        } catch (e) {}
     }
     
     function spoofNetworkInformation() {

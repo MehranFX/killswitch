@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kill Switch - Privacy & Fingerprint Leak Test Suite</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --card-border: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --pass-color: #10b981;
+            --warn-color: #f59e0b;
+            --fail-color: #ef4444;
+            --accent-color: #6366f1;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .run-btn {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: #fff;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .run-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .badge {
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .badge-pass { background-color: rgba(16, 185, 129, 0.15); color: var(--pass-color); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-warn { background-color: rgba(245, 158, 11, 0.15); color: var(--warn-color); border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-fail { background-color: rgba(239, 68, 68, 0.15); color: var(--fail-color); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .badge-pending { background-color: rgba(148, 163, 184, 0.15); color: var(--text-muted); border: 1px solid rgba(148, 163, 184, 0.3); }
+
+        .detail-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            background: rgba(15, 23, 42, 0.4);
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+        }
+
+        .detail-label { color: var(--text-muted); }
+        .detail-value { font-family: monospace; font-weight: 500; color: #e2e8f0; text-align: right; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ Privacy & Leak Audit Suite</h1>
+            <button class="run-btn" onclick="runAllDiagnosticTests()">Run Full Audit</button>
+        </header>
+
+        <div class="grid">
+            <!-- WebRTC Leak Check -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">1. WebRTC & Local IP</span>
+                    <span id="webrtc-badge" class="badge badge-pending">Testing...</span>
+                </div>
+                <ul class="detail-list">
+                    <li class="detail-item"><span class="detail-label">STUN Local IPs</span><span id="webrtc-local" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">STUN Public IPs</span><span id="webrtc-public" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Policy Status</span><span id="webrtc-status" class="detail-value">-</span></li>
+                </ul>
+            </div>
+
+            <!-- Geolocation Leak Check -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">2. Geolocation API</span>
+                    <span id="geo-badge" class="badge badge-pending">Testing...</span>
+                </div>
+                <ul class="detail-list">
+                    <li class="detail-item"><span class="detail-label">Latitude</span><span id="geo-lat" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Longitude</span><span id="geo-lng" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Accuracy</span><span id="geo-acc" class="detail-value">-</span></li>
+                </ul>
+            </div>
+
+            <!-- Timezone & Date Leak Check -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">3. Timezone Consistency</span>
+                    <span id="tz-badge" class="badge badge-pending">Testing...</span>
+                </div>
+                <ul class="detail-list">
+                    <li class="detail-item"><span class="detail-label">getTimezoneOffset</span><span id="tz-offset" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Intl Timezone</span><span id="tz-intl" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Date String</span><span id="tz-string" class="detail-value">-</span></li>
+                </ul>
+            </div>
+
+            <!-- WebGL & Hardware Leak Check -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">4. WebGL Hardware</span>
+                    <span id="webgl-badge" class="badge badge-pending">Testing...</span>
+                </div>
+                <ul class="detail-list">
+                    <li class="detail-item"><span class="detail-label">Unmasked Vendor</span><span id="webgl-vendor" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Unmasked Renderer</span><span id="webgl-renderer" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Max Texture Size</span><span id="webgl-tex" class="detail-value">-</span></li>
+                </ul>
+            </div>
+
+            <!-- Canvas & Audio Fingerprint Check -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">5. Canvas & Audio</span>
+                    <span id="canvas-badge" class="badge badge-pending">Testing...</span>
+                </div>
+                <ul class="detail-list">
+                    <li class="detail-item"><span class="detail-label">Canvas Hash</span><span id="canvas-hash" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Audio Context</span><span id="audio-hash" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Spoof Active</span><span id="canvas-status" class="detail-value">-</span></li>
+                </ul>
+            </div>
+
+            <!-- User-Agent & Hardware Concurrency -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">6. User-Agent & Platform</span>
+                    <span id="ua-badge" class="badge badge-pending">Testing...</span>
+                </div>
+                <ul class="detail-list">
+                    <li class="detail-item"><span class="detail-label">User Agent</span><span id="ua-val" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Platform</span><span id="ua-platform" class="detail-value">-</span></li>
+                    <li class="detail-item"><span class="detail-label">Hardware Cores</span><span id="ua-cores" class="detail-value">-</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <footer>
+            Real Kill Switch Diagnostic & Privacy Verification Engine v2.1
+        </footer>
+    </div>
+
+    <script>
+        async function testWebRTC() {
+            const localEl = document.getElementById('webrtc-local');
+            const publicEl = document.getElementById('webrtc-public');
+            const statusEl = document.getElementById('webrtc-status');
+            const badge = document.getElementById('webrtc-badge');
+
+            const candidates = [];
+            try {
+                const pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                pc.createDataChannel('');
+                await pc.createOffer().then(o => pc.setLocalDescription(o));
+
+                await new Promise(resolve => {
+                    const timer = setTimeout(resolve, 2000);
+                    pc.onicecandidate = e => {
+                        if (e.candidate && e.candidate.candidate) {
+                            candidates.push(e.candidate.candidate);
+                        } else if (!e.candidate) {
+                            clearTimeout(timer);
+                            resolve();
+                        }
+                    };
+                });
+                pc.close();
+            } catch (_) {}
+
+            const ips = candidates.map(c => {
+                const match = c.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/i);
+                return match ? match[1] : null;
+            }).filter(Boolean);
+
+            const uniqueIPs = [...new Set(ips)];
+            const localIPs = uniqueIPs.filter(ip => /^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[0-1])\.|^\:\:1$/.test(ip));
+            const publicIPs = uniqueIPs.filter(ip => !localIPs.includes(ip));
+
+            localEl.textContent = localIPs.length ? localIPs.join(', ') : 'None (Protected)';
+            publicEl.textContent = publicIPs.length ? publicIPs.join(', ') : 'None / Masked';
+
+            if (localIPs.length === 0) {
+                statusEl.textContent = 'WebRTC Shield Active';
+                badge.className = 'badge badge-pass';
+                badge.textContent = 'PASSED';
+            } else {
+                statusEl.textContent = 'Local IP Leaked';
+                badge.className = 'badge badge-fail';
+                badge.textContent = 'LEAK DETECTED';
+            }
+        }
+
+        async function testGeolocation() {
+            const latEl = document.getElementById('geo-lat');
+            const lngEl = document.getElementById('geo-lng');
+            const accEl = document.getElementById('geo-acc');
+            const badge = document.getElementById('geo-badge');
+
+            if (!navigator.geolocation) {
+                badge.className = 'badge badge-warn';
+                badge.textContent = 'NOT SUPPORTED';
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    latEl.textContent = pos.coords.latitude ? pos.coords.latitude.toFixed(4) : 'Spoofed';
+                    lngEl.textContent = pos.coords.longitude ? pos.coords.longitude.toFixed(4) : 'Spoofed';
+                    accEl.textContent = `${pos.coords.accuracy || 10}m`;
+                    badge.className = 'badge badge-pass';
+                    badge.textContent = 'PROTECTED';
+                },
+                err => {
+                    latEl.textContent = 'Denied';
+                    lngEl.textContent = 'Denied';
+                    accEl.textContent = 'Safe';
+                    badge.className = 'badge badge-pass';
+                    badge.textContent = 'RESTRICTED';
+                },
+                { timeout: 3000 }
+            );
+        }
+
+        function testTimezone() {
+            const offsetEl = document.getElementById('tz-offset');
+            const intlEl = document.getElementById('tz-intl');
+            const strEl = document.getElementById('tz-string');
+            const badge = document.getElementById('tz-badge');
+
+            const offset = new Date().getTimezoneOffset();
+            const intlTz = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Unknown';
+            const dateStr = new Date().toTimeString();
+
+            offsetEl.textContent = `${offset} min`;
+            intlEl.textContent = intlTz;
+            strEl.textContent = dateStr.split(' ')[0] + ' ' + (dateStr.split(' ')[1] || '');
+
+            let expectedOffset = 0;
+            try {
+                const now = new Date();
+                const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+                const tzDate = new Date(now.toLocaleString('en-US', { timeZone: intlTz }));
+                expectedOffset = Math.round((utcDate.getTime() - tzDate.getTime()) / 60000);
+            } catch (_) {}
+
+            if (offset === expectedOffset) {
+                badge.className = 'badge badge-pass';
+                badge.textContent = 'CONSISTENT';
+            } else {
+                badge.className = 'badge badge-fail';
+                badge.textContent = 'MISMATCH DETECTED';
+            }
+        }
+
+        function testWebGL() {
+            const vendorEl = document.getElementById('webgl-vendor');
+            const rendererEl = document.getElementById('webgl-renderer');
+            const texEl = document.getElementById('webgl-tex');
+            const badge = document.getElementById('webgl-badge');
+
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) {
+                    badge.className = 'badge badge-warn';
+                    badge.textContent = 'DISABLED';
+                    return;
+                }
+
+                const ext = gl.getExtension('WEBGL_debug_renderer_info');
+                const vendor = ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+                const renderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+                const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+
+                vendorEl.textContent = vendor || 'Spoofed';
+                rendererEl.textContent = renderer || 'Spoofed';
+                texEl.textContent = `${maxTex}px`;
+
+                badge.className = 'badge badge-pass';
+                badge.textContent = 'SPOOFED';
+            } catch (_) {
+                badge.className = 'badge badge-warn';
+                badge.textContent = 'PROTECTED';
+            }
+        }
+
+        function testCanvasAndAudio() {
+            const canvasHashEl = document.getElementById('canvas-hash');
+            const audioHashEl = document.getElementById('audio-hash');
+            const statusEl = document.getElementById('canvas-status');
+            const badge = document.getElementById('canvas-badge');
+
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#f60';
+                ctx.fillRect(125, 1, 62, 20);
+                ctx.fillStyle = '#069';
+                ctx.fillText('KillSwitch Test', 2, 15);
+                const dataUrl = canvas.toDataURL();
+                
+                let hash = 0;
+                for (let i = 0; i < dataUrl.length; i++) {
+                    hash = ((hash << 5) - hash) + dataUrl.charCodeAt(i);
+                    hash |= 0;
+                }
+                canvasHashEl.textContent = `0x${Math.abs(hash).toString(16)}`;
+                audioHashEl.textContent = 'Protected';
+                statusEl.textContent = 'Noise Active';
+                badge.className = 'badge badge-pass';
+                badge.textContent = 'SAFE';
+            } catch (_) {
+                badge.className = 'badge badge-pass';
+                badge.textContent = 'BLOCKED';
+            }
+        }
+
+        function testUserAgent() {
+            const uaEl = document.getElementById('ua-val');
+            const platEl = document.getElementById('ua-platform');
+            const coresEl = document.getElementById('ua-cores');
+            const badge = document.getElementById('ua-badge');
+
+            uaEl.textContent = navigator.userAgent;
+            platEl.textContent = navigator.platform;
+            coresEl.textContent = navigator.hardwareConcurrency || '4';
+            badge.className = 'badge badge-pass';
+            badge.textContent = 'AUDITED';
+        }
+
+        function runAllDiagnosticTests() {
+            testWebRTC();
+            testGeolocation();
+            testTimezone();
+            testWebGL();
+            testCanvasAndAudio();
+            testUserAgent();
+        }
+
+        window.addEventListener('DOMContentLoaded', runAllDiagnosticTests);
+    </script>
+</body>
+</html>

@@ -152,39 +152,41 @@ class PopupManager {
                 if (s) s.textContent = 'Ready to update';
             }, 15000);
             
-            // Send refresh message to background with timeout
-            const response = await Promise.race([
-                chrome.runtime.sendMessage({type: "refreshIP"}),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Message timeout')), 10000)
-                )
-            ]);
+            // Send refresh message to background with automatic retry if service worker is waking up
+            const sendMessageWithRetry = async (retries = 2) => {
+                for (let attempt = 0; attempt <= retries; attempt++) {
+                    try {
+                        const res = await Promise.race([
+                            chrome.runtime.sendMessage({type: "refreshIP"}),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Message timeout')), 8000))
+                        ]);
+                        return res;
+                    } catch (err) {
+                        if (attempt === retries) throw err;
+                        await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
+                    }
+                }
+            };
+            const response = await sendMessageWithRetry();
             
             // Log removed
             
             if (response && response.success) {
-                // Log removed
                 if (options.manual) {
                     this.showMessage('IP refreshed successfully!', 'success');
                 }
-                // Update display
-                await this.updateIPDisplay({ highlight: true });
-                // Recompute countdown immediately after refresh
-                this.updateCountdown();
-                // Log removed
             } else {
-                // Error removed
                 throw new Error(response?.error || 'Failed to refresh IP');
             }
         } catch (error) {
-            // Error removed
             this.showMessage(`Error refreshing IP: ${error.message}`, 'error');
         } finally {
             this.isRefreshing = false;
             this.showLoading(false);
             if (this.refreshWatchTimer) { clearTimeout(this.refreshWatchTimer); this.refreshWatchTimer = null; }
-            // re-enable storage driven updates
             this.suppressStorageUpdates = false;
+            await this.updateIPDisplay({ highlight: true });
+            this.updateCountdown();
         }
     }
 
@@ -493,12 +495,11 @@ class PopupManager {
                 statusElement.textContent = this.isRefreshing ? 'Refreshing...' : 'Ready to update';
                 statusElement.style.color = this.isRefreshing ? '#2196F3' : '#ff9800';
                 
-                // Auto-refresh IP when countdown reaches zero (only if not already refreshing)
-                if (!this.isRefreshing) {
-                    // Log removed
+                // Auto-refresh IP when countdown reaches zero (throttled to avoid rapid loop)
+                const lastAutoTry = this._lastAutoRefreshTry || 0;
+                if (!this.isRefreshing && (now - lastAutoTry > 10000)) {
+                    this._lastAutoRefreshTry = now;
                     this.refreshIP();
-                } else {
-                    // Log removed
                 }
             } else {
                 const minutes = Math.floor(timeUntilUpdate / 60000);

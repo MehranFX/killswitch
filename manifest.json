@@ -75,6 +75,7 @@
 		{
 			"resources": [
 				"html/blocked.html",
+				"html/leak_test.html",
 				"js/blocked.js",
 				"js/webgl_spoofer.js",
 				"js/timezone_inject_main.js",

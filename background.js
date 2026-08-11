@@ -1,6 +1,41 @@
 "use strict";
 
 /**
+ * Run inside a normal web tab so Chrome applies system/browser proxy routing.
+ */
+function probeIPInPageContext() {
+    const endpoints = [
+        'https://api.ipify.org?format=json',
+        'https://ipwho.is/'
+    ];
+    const parseIP = async (url) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+        try {
+            const res = await fetch(url, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache' },
+                signal: controller.signal
+            });
+            clearTimeout(timer);
+            if (!res.ok) return '';
+            const data = await res.json().catch(() => ({}));
+            return (data && data.ip) || '';
+        } catch (_) {
+            clearTimeout(timer);
+            return '';
+        }
+    };
+    return (async () => {
+        for (const url of endpoints) {
+            const ip = (await parseIP(url)).trim();
+            if (ip) return ip;
+        }
+        return '';
+    })();
+}
+
+/**
  * Enhanced background script with better error handling and async operations
  */
 
@@ -97,42 +132,113 @@ class IPUtils {
     static IP_CACHE_DURATION = 30 * 1000; // 30 seconds
 
     static async getPublicIP() {
-        for (const base of this.IP_SERVICES) {
+        const fetchSingleIP = async (base) => {
             const url = base.includes('?') ? `${base}&_=${Date.now()}` : `${base}?_=${Date.now()}`;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 2500);
             try {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 4000);
                 const response = await fetch(url, {
                     method: 'GET',
-                    headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+                    cache: 'no-store',
                     signal: controller.signal
                 });
                 clearTimeout(timer);
-                if (!response.ok) continue;
+                if (!response.ok) throw new Error('Response not ok');
                 const text = (await response.text()).trim();
                 const ip = text.replace(/[^0-9A-Fa-f:\.]/g, '');
                 if (ValidationUtils.isValidIP(ip)) return ip;
-            } catch (_) {
-                // try next service
+                throw new Error('Invalid IP format');
+            } catch (err) {
+                clearTimeout(timer);
+                throw err;
+            }
+        };
+
+        try {
+            // Race all IP services concurrently to return the fastest valid response
+            return await Promise.any(this.IP_SERVICES.map(fetchSingleIP));
+        } catch (_) {
+            // Fallback: sequential check if all concurrent requests failed
+            for (const base of this.IP_SERVICES) {
+                try {
+                    const ip = await fetchSingleIP(base);
+                    if (ip) return ip;
+                } catch (_) {}
             }
         }
         throw new Error('Failed to fetch public IP from all services');
     }
 
-    static async getCachedIP() {
+    static async _fetchIPFromTab(tabId) {
+        const [{ result }] = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: probeIPInPageContext
+        });
+        const ip = (result || '').trim();
+        if (!ip) throw new Error('Empty IP from tab');
+        return ip;
+    }
+
+    static async isBrowserProxyLikelyActive() {
         try {
-            const cached = await chrome.storage.local.get(['cachedIP', 'ipTimestamp']);
-            const now = Date.now();
-            
-            if (cached.cachedIP && cached.ipTimestamp && 
-                (now - cached.ipTimestamp) < this.IP_CACHE_DURATION) {
-                return cached.cachedIP;
+            const settings = await chrome.proxy.settings.get({});
+            const mode = settings?.value?.mode || 'system';
+            if (mode === 'fixed_servers') return true;
+            if (mode === 'pac_script' && settings.levelOfControl !== 'controlled_by_this_extension') {
+                return true;
             }
-            
-            const ip = await this.getPublicIP();
+        } catch (_) {}
+        return false;
+    }
+
+    /**
+     * Fetch public IP inside an open tab so system/browser proxy routing is respected.
+     */
+    static async getPublicIPViaActiveTab() {
+        let tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        let tab = tabs && tabs[0];
+        if (!tab || !tab.id || !tab.url || !/^https?:/i.test(tab.url)) {
+            const allTabs = await chrome.tabs.query({});
+            tab = allTabs.find(t => t && t.id && t.url && /^https?:/i.test(t.url));
+        }
+        if (!tab || !tab.id) {
+            throw new Error('No http(s) tab found');
+        }
+        return this._fetchIPFromTab(tab.id);
+    }
+
+    static async getPublicIPRespectingProxy() {
+        if (await this.isBrowserProxyLikelyActive()) {
+            try {
+                const ip = await this.getPublicIPViaActiveTab();
+                if (ValidationUtils.isValidIP(ip)) return ip;
+            } catch (_) {}
+        }
+        return this.getPublicIP();
+    }
+
+    static async invalidateCache() {
+        await chrome.storage.local.remove([
+            'cachedIP', 'ipTimestamp',
+            'cachedCountry', 'countryTimestamp'
+        ]);
+    }
+
+    static async getCachedIP(forceRefresh = false) {
+        try {
+            if (!forceRefresh) {
+                const cached = await chrome.storage.local.get(['cachedIP', 'ipTimestamp']);
+                const now = Date.now();
+                if (cached.cachedIP && cached.ipTimestamp &&
+                    (now - cached.ipTimestamp) < this.IP_CACHE_DURATION) {
+                    return cached.cachedIP;
+                }
+            }
+
+            const ip = await this.getPublicIPRespectingProxy();
             await chrome.storage.local.set({
                 cachedIP: ip,
-                ipTimestamp: now
+                ipTimestamp: Date.now()
             });
             return ip;
         } catch (error) {
@@ -198,7 +304,6 @@ class IPUtils {
     static async getCountryFromIP(ip) {
         const endpoints = [
             `https://ipwho.is/${ip}`,
-            `http://ip-api.com/json/${ip}?fields=status,countryCode`,
             `https://ipapi.co/${ip}/country/`
         ];
 
@@ -220,7 +325,8 @@ class IPUtils {
      */
     static async getFreshIP() {
         try {
-            const ip = await this.getPublicIP();
+            await this.invalidateCache();
+            const ip = await this.getPublicIPRespectingProxy();
             const now = Date.now();
             await chrome.storage.local.set({
                 current_ip: ip,
@@ -451,39 +557,50 @@ class BackgroundManager {
     }
 
     /**
+     * Stop controlling Chrome proxy without touching IP cache.
+     */
+    static async clearExtensionProxyIfOwned() {
+        try {
+            const sys = await chrome.proxy.settings.get({});
+            const loc = sys.levelOfControl;
+            if (loc === 'controlled_by_this_extension' || loc === 'controllable_by_this_extension') {
+                await chrome.proxy.settings.clear({ scope: 'regular' });
+                return true;
+            }
+        } catch (_) {}
+        return false;
+    }
+
+    /**
+     * Release extension-owned proxy so Chromium can use system/browser proxy again.
+     */
+    static async releaseExtensionProxyControl() {
+        const cleared = await this.clearExtensionProxyIfOwned();
+        if (cleared) {
+            await IPUtils.invalidateCache();
+            await new Promise(r => setTimeout(r, 150));
+        }
+    }
+
+    static async cleanupOrphanProbeTabs() {
+        try {
+            const blanks = await chrome.tabs.query({ url: 'about:blank' });
+            if (blanks.length < 2) return;
+            for (const tab of blanks) {
+                if (tab.id) {
+                    try { await chrome.tabs.remove(tab.id); } catch (_) {}
+                }
+            }
+        } catch (_) {}
+    }
+
+    static _ipUpdateInProgress = false;
+
+    /**
      * Apply minimal routing before IP detection so getPublicIP uses the intended path
      */
-    static _bootstrapAppliedTs = 0;
     static async applyBootstrapProxyRouting() {
-        try {
-            // Debounce to avoid rapid toggling
-            const now = Date.now();
-            if (now - this._bootstrapAppliedTs < 1500) return;
-            const settings = await chrome.storage.local.get(['fallback_proxy']);
-            const useFallback = false; // removed manual toggle; auto-handled below
-            const blockedDomains = this._blockedDomains ? Array.from(this._blockedDomains) : [];
-            if (useFallback || (blockedDomains && blockedDomains.length > 0)) {
-                const currentIP = await IPUtils.getCachedIP().catch(()=>null) || '';
-                const storageData = await chrome.storage.local.get(['urls','allowed_ips']);
-                const whitelistData = [];
-                const storedUrls = storageData.urls || [];
-                const storedIPs = storageData.allowed_ips || [];
-                for (let i=0;i<storedUrls.length;i++){
-                    const allowedIPsString = storedIPs[i] || '';
-                    const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
-                    whitelistData.push({ domain: storedUrls[i], allowedIPs });
-                }
-                const pacScript = this.generatePACScript(blockedDomains, currentIP, whitelistData, useFallback?settings.fallback_proxy:'');
-                const proxyConfig = { mode: 'pac_script', pacScript: { data: pacScript } };
-                await chrome.proxy.settings.set({ value: proxyConfig, scope: 'regular' });
-                this._bootstrapAppliedTs = now;
-            } else {
-                await chrome.proxy.settings.clear({});
-                this._bootstrapAppliedTs = now;
-            }
-        } catch (e) {
-            // Bootstrap routing error
-        }
+        await this.releaseExtensionProxyControl();
     }
 
     /**
@@ -702,15 +819,48 @@ class BackgroundManager {
     /**
      * Update IP and rules - core update logic
      */
-    static async updateIPAndRules() {
-        // Log removed
+    static async updateIPAndRules(force = false) {
+        if (force) {
+            this._ipUpdateInProgress = false;
+            await IPUtils.invalidateCache();
+        } else if (this._ipUpdateInProgress) {
+            return;
+        }
+        this._ipUpdateInProgress = true;
         try {
-            // 1) Get a STABLE IP (multiple probes to avoid flicker)
-            const freshIP = await this.getStablePublicIP();
-            // Store IP and flag atomically
+            const hadPac = await this.clearExtensionProxyIfOwned();
+            if (hadPac) {
+                await IPUtils.invalidateCache();
+                await new Promise(r => setTimeout(r, 150));
+            }
+
+            let freshIP = '';
+            try {
+                freshIP = await IPUtils.getPublicIPRespectingProxy();
+            } catch (_) {}
+
+            const ipLocation = await this.fetchIPLocation(freshIP);
+            if (!ValidationUtils.isValidIP(freshIP) && ipLocation && ipLocation.ip) {
+                freshIP = ipLocation.ip;
+            }
+            if (!ValidationUtils.isValidIP(freshIP)) {
+                const stored = await chrome.storage.local.get(['current_ip', 'cachedIP']);
+                freshIP = stored.current_ip || stored.cachedIP || '';
+            }
+
+            if (ValidationUtils.isValidIP(freshIP)) {
             const now = Date.now();
-            const country = await IPUtils.getCountryCode(freshIP).catch(()=> '');
+            
+            // Unified location, country and flag resolution
+            let country = '';
+            if (ipLocation && ipLocation.locale) {
+                country = (ipLocation.locale.split('-')[1] || '').toUpperCase();
+            }
+            if (!country) {
+                country = await IPUtils.getCountryCode(freshIP).catch(() => '');
+            }
             const flag = IPUtils.countryCodeToFlag(country);
+
             await chrome.storage.local.set({
                 current_ip: freshIP,
                 cachedIP: freshIP,
@@ -733,163 +883,61 @@ class BackgroundManager {
             } catch (_) {}
             
             // Update location spoofing if set to match IP
-            const locationData = await chrome.storage.local.get(['location_config']);
-            // Log removed
-            if (locationData.location_config === 'matchIP' || !locationData.location_config) {
-                // Log removed
-                const ipLocation = await this.fetchIPLocation();
-                if (ipLocation) {
-                    // Log removed
-                    await chrome.storage.local.set({
-                        timezone: ipLocation.timezone,
-                        locale: ipLocation.locale,
-                        latitude: ipLocation.latitude,
-                        longitude: ipLocation.longitude
-                    });
-                    
-                    // Re-attach debugger to all tabs with new values
-                    await this.updateAllTabsWithNewLocation(ipLocation);
-                    // Log removed
-                    
-                    // Store IP-based timezone and locale for getTimezoneSettings
-                    await chrome.storage.local.set({
-                        current_timezone: ipLocation.timezone,
-                        current_locale: ipLocation.locale,
-                        timezone: ipLocation.timezone,
-                        locale: ipLocation.locale
-                    });
-                    
-                    // Log removed
-                    
-                    // Notify all tabs (including content scripts) to update timezone
+            if (ipLocation) {
+                await chrome.storage.local.set({
+                    timezone: ipLocation.timezone,
+                    locale: ipLocation.locale,
+                    latitude: ipLocation.latitude,
+                    longitude: ipLocation.longitude,
+                    current_timezone: ipLocation.timezone,
+                    current_locale: ipLocation.locale
+                });
+                
+                // Run heavy tab CDP debugger re-attachments asynchronously in background so IP response is instant
+                (async () => {
                     try {
-                        const tabs = await chrome.tabs.query({});
-                        for (const tab of tabs) {
-                            if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://') || tab.url.includes('chrome-extension://'))) {
-                                try {
-                                    await chrome.tabs.sendMessage(tab.id, {
-                                        type: 'locationUpdated',
-                                        timezone: ipLocation.timezone,
-                                        locale: ipLocation.locale,
-                                        latitude: ipLocation.latitude,
-                                        longitude: ipLocation.longitude
-                                    });
-                                } catch (e) {
-                                    // Ignore errors for tabs that don't have the message listener
+                        const locationData = await chrome.storage.local.get(['location_config']);
+                        if (locationData.location_config === 'matchIP' || !locationData.location_config) {
+                            await this.updateAllTabsWithNewLocation(ipLocation);
+                            const tabs = await chrome.tabs.query({});
+                            for (const tab of tabs) {
+                                if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
+                                    try {
+                                        await chrome.tabs.sendMessage(tab.id, {
+                                            type: 'locationUpdated',
+                                            timezone: ipLocation.timezone,
+                                            locale: ipLocation.locale,
+                                            latitude: ipLocation.latitude,
+                                            longitude: ipLocation.longitude
+                                        });
+                                    } catch (_) {}
                                 }
                             }
                         }
-                    } catch (e) {
-                        // Log removed
-                    }
-                }
+                    } catch (_) {}
+                })();
             }
-            // Log removed
-            
-            // Verify IP was stored
-            const stored = await chrome.storage.local.get(['current_ip', 'cachedIP', 'last_ip_update', 'ip_country', 'ip_flag']);
-            // Log removed
-            
-            // 3) Update rules based on new IP
+            }
+
             await this.setupCachedRules();
-            // 4) Rebuild immediate blocking rules (DNR) first to catch navigation ASAP
             await this.setupDeclarativeNetRequest();
-            // 5) Then (re)apply proxy/PAC routing based on the same rules
-            const pacApplied = await this.setupProxyBlocking();
-            
-            // اگر PAC فعال شد، دیگر نیازی به DNR نیست؛ در غیر این صورت (مد system) DNR را نگه می‌داریم
-            if (pacApplied) {
-                await this.clearDynamicRules();
-            }
-            
-            // Log removed
-            
+            await this.setupProxyBlocking();
+
         } catch (error) {
-            // Error removed
-            try { await chrome.proxy.settings.clear({}); } catch {}
+            try {
+                await this.clearExtensionProxyIfOwned();
+                await this.setupDeclarativeNetRequest();
+            } catch (_) {}
+        } finally {
+            this._ipUpdateInProgress = false;
         }
     }
 
     /**
-     * Get current public IP by executing fetch inside the ACTIVE TAB context
-     * so the exact browser routing (system proxy/PAC) is respected.
-     */
-    static async getIPViaActiveTab() {
-        try {
-            let tabs = await chrome.tabs.query({active: true, currentWindow: true});
-            let tab = tabs && tabs[0];
-            // اگر تب فعال http(s) نبود، بین تمام تب‌ها یکی را پیدا کن
-            if (!tab || !tab.id || !tab.url || !/^https?:/i.test(tab.url)) {
-                const allTabs = await chrome.tabs.query({});
-                tab = allTabs.find(t => t && t.id && t.url && /^https?:/i.test(t.url));
-            }
-            if (!tab || !tab.id || !tab.url || !/^https?:/i.test(tab.url)) {
-                throw new Error('No http(s) tab found');
-            }
-            const [{ result }] = await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: () => {
-                    return new Promise(async (resolve) => {
-                        try {
-                            const controller = new AbortController();
-                            const t = setTimeout(() => controller.abort(), 5000);
-                            const res = await fetch('https://api.ipify.org?format=json', {
-                                cache: 'no-store',
-                                headers: { 'Cache-Control': 'no-cache' },
-                                signal: controller.signal
-                            });
-                            clearTimeout(t);
-                            const data = await res.json().catch(()=>({}));
-                            resolve((data && data.ip) || '');
-                        } catch (e) {
-                            resolve('');
-                        }
-                    });
-                }
-            });
-            const ip = (result || '').trim();
-            if (!ip) throw new Error('Empty IP from tab');
-            return ip;
-        } catch (e) {
-            // Warning removed
-            throw e;
-        }
-    }
-
-    /**
-     * Probe public IP several times and return a stable value to avoid flicker
+     * @deprecated Use IPUtils.getPublicIPRespectingProxy() directly
      */
     static async getStablePublicIP() {
-        // فقط بر اساس fetch (بدون تب) + هیسترزیس مقابل سوییچ سریع
-        const probe = async () => {
-            try {
-                const ip = await IPUtils.getPublicIP();
-                if (ValidationUtils.isValidIP(ip)) return ip;
-            } catch {}
-            return '';
-        };
-        const p1 = await probe();
-        await new Promise(r => setTimeout(r, 300));
-        const p2 = await probe();
-        if (p1 && p1 === p2) return p2;
-        await new Promise(r => setTimeout(r, 300));
-        const p3 = await probe();
-        const arr = [p1, p2, p3].filter(Boolean);
-        if (arr.length === 0) throw new Error('IP probes failed');
-        const counts = arr.reduce((m, v) => { m[v] = (m[v] || 0) + 1; return m; }, {});
-        let best = arr[arr.length - 1];
-        for (const k in counts) { if (counts[k] >= 2) { best = k; break; } }
-        // Hysteresis: اگر با مقدار قبلی متفاوت است، فقط هر 20 ثانیه اجازهٔ تغییر بده
-        try {
-            const st = await chrome.storage.local.get(['current_ip','cachedIP','ip_last_switch_ts']);
-            const previousIP = st.current_ip || st.cachedIP || '';
-            const lastSwitch = st.ip_last_switch_ts || 0;
-            const now = Date.now();
-            if (previousIP && previousIP !== best && (now - lastSwitch) < 20000) {
-                return previousIP;
-            }
-        } catch {}
-        return best;
+        return IPUtils.getPublicIPRespectingProxy();
     }
 
     /**
@@ -938,7 +986,8 @@ class BackgroundManager {
                 // If matchIP, fetch current IP location
                 if (config === 'matchIP') {
                     // Log removed
-                    const ipLocation = await this.fetchIPLocation();
+                    const ip = await IPUtils.getPublicIPRespectingProxy().catch(() => '');
+                    const ipLocation = await this.fetchIPLocation(ip);
                     if (ipLocation) {
                         // Log removed
                         timezone = ipLocation.timezone;
@@ -976,26 +1025,55 @@ class BackgroundManager {
     }
 
     /**
-     * Fetch IP location data
+     * Fetch IP location data for a known IP (avoids direct connection leak when proxied)
      */
-    static async fetchIPLocation() {
+    static async fetchIPLocation(ip = '') {
         try {
-            // Log removed
-            const response = await fetch(`http://ip-api.com/json?fields=status,message,countryCode,lat,lon,timezone,query&ts=${Date.now()}` , { cache: 'no-store' });
-            const data = await response.json();
-            // Log removed
-            if (data.status === 'success') {
-                const result = {
-                    timezone: data.timezone,
-                    locale: this.getLocaleFromCountryCode(data.countryCode),
-                    latitude: data.lat,
-                    longitude: data.lon
-                };
-                // Log removed
-                return result;
-            } else {
-                // Log removed
+            if (!ip) {
+                const stored = await chrome.storage.local.get(['current_ip', 'cachedIP']);
+                ip = stored.current_ip || stored.cachedIP || '';
             }
+            // Primary HTTPS endpoint: ipwho.is
+            const primaryUrl = ip ? `https://ipwho.is/${encodeURIComponent(ip)}` : 'https://ipwho.is/';
+            try {
+                const response = await fetch(primaryUrl, { cache: 'no-store' });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && (data.success !== false)) {
+                        const tz = data.timezone?.id || data.timezone;
+                        const cc = data.country_code || data.countryCode;
+                        const lat = data.latitude !== undefined ? data.latitude : data.lat;
+                        const lon = data.longitude !== undefined ? data.longitude : data.lon;
+                        const detectedIP = data.ip || data.query || ip;
+                        if (tz && lat !== undefined && lon !== undefined) {
+                            return {
+                                ip: detectedIP,
+                                timezone: tz,
+                                locale: this.getLocaleFromCountryCode(cc),
+                                latitude: lat,
+                                longitude: lon
+                            };
+                        }
+                    }
+                }
+            } catch (_) {}
+
+            // Fallback HTTPS endpoint: ipapi.co
+            const fallbackUrl = ip ? `https://ipapi.co/${encodeURIComponent(ip)}/json/` : 'https://ipapi.co/json/';
+            try {
+                const response = await fetch(fallbackUrl, { cache: 'no-store' });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.timezone) {
+                        return {
+                            timezone: data.timezone,
+                            locale: this.getLocaleFromCountryCode(data.country_code || data.countryCode),
+                            latitude: data.latitude,
+                            longitude: data.longitude
+                        };
+                    }
+                }
+            } catch (_) {}
         } catch (error) {
             // Error removed
         }
@@ -1065,63 +1143,42 @@ class BackgroundManager {
         }
     }
 
-    /**
-     * Update all tabs with new location data (re-attach debugger with new values)
-     */
     static async updateAllTabsWithNewLocation(ipLocation) {
         try {
-            // Log removed
             const tabs = await chrome.tabs.query({});
-            
-            for (const tab of tabs) {
-                if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://') && 
-                    !tab.url.startsWith('moz-extension://') && !tab.url.startsWith('edge-extension://') &&
-                    !tab.url.startsWith('about:') && !tab.url.startsWith('file://')) {
-                    
+            const updateSingleTab = async (tab) => {
+                if (!tab || !tab.url || /^chrome(-extension)?:\/\//i.test(tab.url) || /^about:/i.test(tab.url) || /^file:/i.test(tab.url)) return;
+                try {
                     try {
-                        // First, push live values into MAIN world so no reload is needed
-                        try {
-                            await chrome.scripting.executeScript({
-                                target: { tabId: tab.id, allFrames: true },
-                                world: 'MAIN',
-                                func: (tz, loc) => {
-                                    try {
-                                        window.__ks_boot_tz__ = tz;
-                                        window.__ks_boot_locale__ = loc || 'en-US';
-                                        if (typeof window.updateEarlyTimezoneSpoofing === 'function') {
-                                            window.updateEarlyTimezoneSpoofing(tz, loc || 'en-US');
-                                        }
-                                    } catch (e) {
-                                        // Warning removed
+                        await chrome.scripting.executeScript({
+                            target: { tabId: tab.id, allFrames: true },
+                            world: 'MAIN',
+                            func: (tz, loc) => {
+                                try {
+                                    window.__ks_boot_tz__ = tz;
+                                    window.__ks_boot_locale__ = loc || 'en-US';
+                                    if (typeof window.updateEarlyTimezoneSpoofing === 'function') {
+                                        window.updateEarlyTimezoneSpoofing(tz, loc || 'en-US');
                                     }
-                                },
-                                args: [ipLocation.timezone, ipLocation.locale]
-                            });
-                        } catch (e) {
-                            // Warning removed
-                        }
+                                } catch (_) {}
+                            },
+                            args: [ipLocation.timezone, ipLocation.locale]
+                        });
+                    } catch (_) {}
 
-                        // Then re-attach debugger to refresh CDP emulations (tz/geolocation)
-                        try { await chrome.debugger.detach({ tabId: tab.id }); } catch (_) {}
-                        await this.attachDebugger(
-                            tab.id,
-                            ipLocation.timezone,
-                            ipLocation.locale,
-                            ipLocation.latitude,
-                            ipLocation.longitude
-                        );
+                    try { await chrome.debugger.detach({ tabId: tab.id }); } catch (_) {}
+                    await this.attachDebugger(
+                        tab.id,
+                        ipLocation.timezone,
+                        ipLocation.locale,
+                        ipLocation.latitude,
+                        ipLocation.longitude
+                    );
+                } catch (_) {}
+            };
 
-                        // Log removed
-                    } catch (error) {
-                        // Warning removed
-                    }
-                }
-            }
-            
-            // Log removed
-        } catch (error) {
-            // Error removed
-        }
+            await Promise.allSettled(tabs.map(updateSingleTab));
+        } catch (error) {}
     }
 
     /**
@@ -1284,8 +1341,9 @@ class BackgroundManager {
      */
     static async initialize() {
         try {
-            // Log removed
-            
+            await this.cleanupOrphanProbeTabs();
+            await this.clearExtensionProxyIfOwned();
+
             // Initialize WebRTC settings
             // Log removed
             await this.initializeWebRTC();
@@ -1398,32 +1456,7 @@ class BackgroundManager {
                 } catch (_) {}
             });
             
-            // Set up cached rules for sync access
-            await this.setupCachedRules();
-            // Respect master toggle for DNR setup
-            const settings = await chrome.storage.local.get({ privacy_master: true });
-            if (settings.privacy_master !== false) {
-                // Build immediate blocking rules (DNR) to avoid late blocking
-                await this.setupDeclarativeNetRequest();
-            } else {
-                await this.clearDynamicRules();
-            }
-            // Sanity polyfills removed - they were causing site compatibility issues
-
-            // Set up DNS level proxy routing
-            const pacAppliedInit = await this.setupProxyBlocking();
-            
-            // اگر PAC فعال شد، قوانین DNR را پاک می‌کنیم
-            if (pacAppliedInit) {
-                await this.clearDynamicRules();
-            }
-            
-            // Force refresh proxy settings with delay
-            setTimeout(async () => {
-                await this.refreshProxySettings();
-            }, 1000);
-            
-            // Note: PAC script handles whitelist logic, no need to clear proxy
+            // updateIPAndRules() already configured DNR and released extension proxy control
             
             // Set up detection for blocked requests
             this.setupBlockedRequestDetection();
@@ -1530,63 +1563,14 @@ class BackgroundManager {
      * Force clear proxy on startup
      */
     static async forceClearProxyOnStartup() {
-        try {
-            // Log removed
-            
-            // Multiple clear attempts
-            for (let i = 0; i < 5; i++) {
-                await chrome.proxy.settings.clear({});
-                // Log removed
-                await new Promise(resolve => setTimeout(resolve, 200));
-            }
-            
-            // Force set direct connection
-            await chrome.proxy.settings.set({
-                value: { mode: 'direct' },
-                scope: 'regular'
-            });
-            // Log removed
-            
-            // Wait a bit
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Clear again
-            await chrome.proxy.settings.clear({});
-            // Log removed
-            
-        } catch (error) {
-            // Error removed
-        }
+        await this.clearExtensionProxyIfOwned();
     }
 
     /**
      * Force refresh proxy settings to ensure changes take effect
      */
     static async refreshProxySettings() {
-        try {
-            // Log removed
-            
-            // Get current proxy settings
-            const settings = await chrome.proxy.settings.get({});
-            try {
-                // Log removed
-            } catch (_) {
-                // Log removed
-            }
-            
-            // Force a refresh by setting the same settings again
-            if (settings.value && settings.value.mode === 'pac_script') {
-                await chrome.proxy.settings.set({
-                    value: settings.value,
-                    scope: 'regular'
-                });
-                // Log removed
-            } else {
-                // Log removed
-            }
-        } catch (error) {
-            // Error removed
-        }
+        await this.clearExtensionProxyIfOwned();
     }
 
     /**
@@ -1786,8 +1770,7 @@ class BackgroundManager {
     static async recoverFromProxyFailure() {
         try {
             await chrome.storage.local.set({ fallback_enabled: false });
-            await chrome.proxy.settings.clear({});
-            // Log removed
+            await this.clearExtensionProxyIfOwned();
         } catch (e) {
             // Error removed
         }
@@ -1816,7 +1799,7 @@ class BackgroundManager {
                 
                 // Block immediately by redirecting to blocked page
                 try {
-                    const domain = URLUtils.getHostFromURL(details.url);
+                    const domain = URLUtils.getHostFromURL(url);
                     const blockedPageUrl = chrome.runtime.getURL(`html/blocked.html?domain=${encodeURIComponent(domain)}`);
                     
                     // Store domain in session storage
@@ -2189,78 +2172,11 @@ class BackgroundManager {
     }
 
     /**
-     * Set up DNS level proxy blocking
+     * Never override Chromium proxy — blocking is handled by DNR only.
      */
     static async setupProxyBlocking() {
-        try {
-            // Log removed
-
-            // Gather inputs
-            const currentIP = await IPUtils.getCachedIP();
-            const { urls = [], allowed_ips = [] } = await chrome.storage.local.get(['urls', 'allowed_ips']);
-
-            // Build whitelist data (domain → allowed IPs)
-            const whitelistData = [];
-            for (let i = 0; i < urls.length; i++) {
-                const domain = urls[i];
-                const allowedIPsString = allowed_ips[i] || '';
-                const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
-                whitelistData.push({ domain, allowedIPs });
-            }
-
-            // Blocked domains generated previously in setupCachedRules
-            const blockedDomains = this._blockedDomains ? Array.from(this._blockedDomains) : [];
-
-            // Fallback proxy (optional) or auto-derive from system when possible
-            const { fallback_proxy = '' } = await chrome.storage.local.get(['fallback_proxy']);
-            let fallback = '';
-            try {
-                const sys = await chrome.proxy.settings.get({});
-                const mode = sys?.value?.mode;
-                // Map Chrome proxy scheme to PAC keyword
-                const toPacToken = (p) => {
-                    if (!p || !p.host || !p.port) return '';
-                    const scheme = (p.scheme || '').toLowerCase();
-                    if (scheme === 'https') return `HTTPS ${p.host}:${p.port}`;
-                    if (scheme === 'socks5') return `SOCKS5 ${p.host}:${p.port}`;
-                    if (scheme === 'socks' || scheme === 'socks4') return `SOCKS ${p.host}:${p.port}`;
-                    // default http
-                    return `PROXY ${p.host}:${p.port}`;
-                };
-                if (mode === 'fixed_servers' && sys.value?.rules) {
-                    const rules = sys.value.rules;
-                    const pick = rules.singleProxy || rules.proxyForHttp || rules.proxyForHttps || rules.fallbackProxy;
-                    const pacTok = toPacToken(pick);
-                    if (pacTok) fallback = pacTok;
-                } else if (mode === 'direct' || mode === 'system') {
-                    // Always respect system/direct: never set PAC; rely on DNR when needed
-                    await chrome.proxy.settings.clear({});
-                    // Log removed
-                    return false;
-                } else if (mode === 'pac_script') {
-                    // When user/system already has PAC, do not override unless we must block domains via sinkhole
-                    if (blockedDomains.length === 0) {
-                        // System PAC present and no blocked domains; leaving as-is
-                        return false;
-                    }
-                }
-                // If system proxy not detectable but user provided fallback_proxy, use it
-                // IMPORTANT: در حالت system/direct، از fallback کاربر استفاده نمی‌کنیم تا وقتی سیستم پروکسی خاموش است، مسیر DIRECT بماند
-            } catch (e) {
-                // Warning removed
-            }
-
-            // Generate and apply PAC
-            const pacScript = this.generatePACScript(blockedDomains, currentIP, whitelistData, fallback);
-            const proxyConfig = { mode: 'pac_script', pacScript: { data: pacScript } };
-            await chrome.proxy.settings.set({ value: proxyConfig, scope: 'regular' });
-            // Log removed
-            return true;
-            
-        } catch (error) {
-            // Error removed
-            return false;
-        }
+        await this.clearExtensionProxyIfOwned();
+        return false;
     }
 
     /**
@@ -2364,22 +2280,15 @@ function FindProxyForURL(url, host) {
         }
     }
     
-    // Force IP check endpoints through proxy when available
+    // Route IP-check and general traffic through the configured proxy
     for (var k = 0; k < ipCheckHosts.length; k++) {
         var h = ipCheckHosts[k];
         if (host === h || host.endsWith('.' + h)) {
-            if (fallbackProxy && fallbackProxy.length > 0) {
-                return fallbackProxy;
-            }
+            return fallbackProxy;
         }
     }
-    // Log removed
-    // Log removed
-    if (fallbackProxy && fallbackProxy.length > 0) {
-        return fallbackProxy;
-    }
-    return "DIRECT";
-}`;
+    return fallbackProxy;
+`;
     }
 
     /**
@@ -2403,9 +2312,9 @@ function FindProxyForURL(url, host) {
             // Log removed
             // Log removed
             
-            // Clear existing rules (only ours: ids 1..1999)
+            // Clear existing rules (ids 1..20000)
             const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-            const ruleIdsToRemove = existingRules.filter(r=> r.id>=1 && r.id<=1999).map(rule => rule.id);
+            const ruleIdsToRemove = existingRules.filter(r=> r.id>=1 && r.id<=20000).map(rule => rule.id);
             if (ruleIdsToRemove.length > 0) {
                 await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIdsToRemove });
             }
@@ -2418,7 +2327,7 @@ function FindProxyForURL(url, host) {
             
             // Create rules for each URL
             const rules = [];
-            // start ids from 1.. to avoid clashing (reserve 1500..1999 for fp stubs)
+            // start ids from 1.. to avoid clashing (reserve 10000+ for fp stubs)
             let ruleId = 1;
 
             // Global anti-fingerprinting: redirect common FingerprintJS script URLs to local stub
@@ -2429,7 +2338,7 @@ function FindProxyForURL(url, host) {
                 '||openfpcdn.io/fingerprintjs/*/fingerprint2.min.js',
                 '||static.cloudflareinsights.com/beacon.min.js'
             ];
-            let fpRuleId = 1500;
+            let fpRuleId = 10000;
             for (const urlFilter of fpTargets) {
                 rules.push({
                     id: fpRuleId++,
@@ -2767,8 +2676,7 @@ function FindProxyForURL(url, host) {
                 switch (request.type) {
                     case 'update':
                         await this.updateLocalStorage();
-                        await this.setupCachedRules();
-                        await this.setupProxyBlocking();
+                        await this.updateIPAndRules();
                         sendResponse({ success: true });
                         break;
                         
@@ -2789,14 +2697,12 @@ function FindProxyForURL(url, host) {
                         
                     case 'refreshIP':
                         try {
-                            // Log removed
-                            await this.updateIPAndRules();
+                            // Force invalidate cache and lock to update immediately
+                            await this.updateIPAndRules(true);
                             const result = await chrome.storage.local.get(['current_ip', 'cachedIP']);
                             const ip = result.current_ip || result.cachedIP;
-                            // Log removed
                             sendResponse({ success: true, ip: ip });
                         } catch (error) {
-                            // Error removed
                             await ErrorHandler.handle(error, 'refreshIP');
                             sendResponse({ success: false, error: error.message });
                         }
@@ -2915,95 +2821,20 @@ function FindProxyForURL(url, host) {
                         
                     case 'clearProxy':
                         try {
-                            // Log removed
-                            
-                            // First, clear proxy settings
-                            await chrome.proxy.settings.clear({});
-                            // Log removed
-                            
-                            // Wait a bit for settings to take effect
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                            
-                            // Force set direct connection
-                            await chrome.proxy.settings.set({
-                                value: {
-                                    mode: 'direct'
-                                },
-                                scope: 'regular'
-                            });
-                            // Log removed
-                            
-                            // Wait a bit more
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                            
-                            // Clear again to ensure it's really cleared
-                            await chrome.proxy.settings.clear({});
-                            // Log removed
-                            
-                            // Wait for final clear to take effect
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                            
-                            // Force refresh all tabs
-                            const tabs = await chrome.tabs.query({});
-                            // Log removed
-                            
-                            for (const tab of tabs) {
-                                try {
-                                    if (tab.url && tab.url.includes('binance.com')) {
-                                        // Log removed
-                                        await chrome.tabs.reload(tab.id);
-                                    }
-                                } catch (e) {
-                                    // Log removed
-                                }
-                            }
-                            
-                            // Also try to refresh current active tab
-                            try {
-                                const activeTabs = await chrome.tabs.query({active: true, currentWindow: true});
-                                if (activeTabs[0]) {
-                                    await chrome.tabs.reload(activeTabs[0].id);
-                                    // Log removed
-                                }
-                            } catch (e) {
-                                // Log removed
-                            }
-                            
+                            await this.clearExtensionProxyIfOwned();
+                            await IPUtils.invalidateCache();
                             sendResponse({ success: true });
                         } catch (error) {
-                            // Error removed
                             sendResponse({ success: false, error: error.message });
                         }
                         break;
                         
                     case 'forceClearProxy':
                         try {
-                            // Log removed
-                            
-                            // Multiple clear attempts
-                            for (let i = 0; i < 3; i++) {
-                                await chrome.proxy.settings.clear({});
-                                // Log removed
-                                await new Promise(resolve => setTimeout(resolve, 500));
-                            }
-                            
-                            // Force set direct connection multiple times
-                            for (let i = 0; i < 3; i++) {
-                                await chrome.proxy.settings.set({
-                                    value: { mode: 'direct' },
-                                    scope: 'regular'
-                                });
-                                // Log removed
-                                await new Promise(resolve => setTimeout(resolve, 500));
-                            }
-                            
-                            // Final clear
-                            await chrome.proxy.settings.clear({});
-                            // Log removed
-                            
+                            await this.clearExtensionProxyIfOwned();
+                            await IPUtils.invalidateCache();
                             sendResponse({ success: true });
                         } catch (error) {
-                            // Error removed
                             sendResponse({ success: false, error: error.message });
                         }
                         break;
@@ -3132,8 +2963,45 @@ function validateIP(details) {
     return BackgroundManager.validateIP(details);
 }
 
+// Register Chrome Extension listeners synchronously at top-level script evaluation (Manifest V3 Requirement)
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    return BackgroundManager.handleMessage(request, sender, sendResponse);
+});
+
+if (chrome.alarms && chrome.alarms.onAlarm) {
+    chrome.alarms.onAlarm.addListener((alarm) => {
+        BackgroundManager.handleAlarm(alarm);
+    });
+}
+
+if (chrome.tabs && chrome.tabs.onActivated) {
+    chrome.tabs.onActivated.addListener(async (info) => {
+        try {
+            await chrome.storage.local.set({ current_tab_id: info.tabId });
+            await BackgroundManager.setColor(info.tabId);
+        } catch (_) {}
+    });
+}
+
+if (chrome.tabs && chrome.tabs.onUpdated) {
+    chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+        try {
+            const blockedPage = chrome.runtime.getURL('html/blocked.html');
+            const url = changeInfo.url || tab?.url || '';
+            if (!url || !/^https?:/i.test(url)) return;
+            if (url.startsWith(blockedPage)) return;
+            const host = new URL(url).hostname;
+            await chrome.storage.local.set({ [`blockedUrl_${tabId}`]: url, last_blocked_domain: host });
+        } catch (_) {}
+    });
+}
+
 // Initialize when script loads
 BackgroundManager.initialize();
+
+chrome.runtime.onSuspend.addListener(() => {
+    BackgroundManager.clearExtensionProxyIfOwned();
+});
 
 class IconManager {
     static async updateIcon(flag) {
@@ -3209,12 +3077,13 @@ class IconManager {
             }
         } catch (_) {}
         try {
-            // choose a good CDN dimension close to our target square
-            // flagcdn provides WxH, flags ~4:3. We map square size to width close-by
             const widthMap = {16:32, 32:64, 48:96, 128:256};
             const w = widthMap[size] || 128;
             const url = `https://flagcdn.com/${w}x${Math.round(w*0.75)}/${country}.png`;
-            const res = await fetch(url, { cache: 'no-store' });
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 2500);
+            const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
+            clearTimeout(timer);
             if (!res.ok) return null;
             const blob = await res.blob();
             // cache as base64

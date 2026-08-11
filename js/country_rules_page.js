@@ -137,10 +137,11 @@ const ValidationUtils = {
       
       // Log removed
       
-      row.innerHTML = `<span style="font-weight:600;">${r.domain}</span>
+      const safeDomain = String(r.domain || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+      row.innerHTML = `<span style="font-weight:600;">${safeDomain}</span>
                        <span style=\"color:#6c757d;\">${modeLabel}</span>
                        <span style=\"display:flex; flex-wrap:wrap; gap:6px; align-items:center;\">${countriesHtml}</span>
-                       <a href="#" data-domain="${r.domain}" class="delete" style="justify-self:end;">Delete</a>`;
+                       <a href="#" data-domain="${safeDomain}" class="delete" style="justify-self:end;">Delete</a>`;
       row.querySelector('.delete').onclick = async (e)=>{
         e.preventDefault();
         const dom = e.target.getAttribute('data-domain');

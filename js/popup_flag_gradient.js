@@ -117,42 +117,25 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (!locationEl || !timezoneEl || !statusCard) return;
     
-    var locationText = (locationEl.textContent || '').toLowerCase();
-    var timezoneText = (timezoneEl.textContent || '').toLowerCase();
-    var allText = locationText + ' ' + timezoneText;
-    
-    // Extract country code
-    var countryCode = extractCountryCode(allText);
-    
-    // Update location text to show country name + code
-    if (countryCode && countryData[countryCode]) {
-      var countryName = countryData[countryCode].name;
-      var currentText = locationEl.textContent || '';
-      
-      // Check if country name is already displayed
-      if (currentText.indexOf(countryName) === -1) {
-        // If current text is just a country code, replace it completely
-        if (currentText.trim() === countryCode) {
-          locationEl.textContent = countryName;
-        } else {
-          // Otherwise, try to replace the country code in the text
-          var updatedText = currentText.replace(/\b[A-Z]{2}\b/, countryName);
-          locationEl.textContent = updatedText;
+    try {
+      chrome.storage.local.get(['ip_country'], function(data) {
+        var countryCode = (data && data.ip_country) ? String(data.ip_country).toUpperCase() : null;
+        if (!countryCode) {
+          var locationText = (locationEl.textContent || '').toLowerCase();
+          var timezoneText = (timezoneEl.textContent || '').toLowerCase();
+          countryCode = extractCountryCode(locationText + ' ' + timezoneText);
         }
-      }
-    }
-    
-    // Apply gradient if country detected
-    if (countryCode) {
-      var colors = generateFlagColors(countryCode);
-      var gradient = 'linear-gradient(135deg, ' + colors[0] + ' 0%, ' + colors[1] + ' 50%, ' + colors[2] + ' 100%)';
-      
-      statusCard.setAttribute('data-country', countryCode);
-      statusCard.style.setProperty('--flag-gradient', gradient);
-    } else {
-      statusCard.removeAttribute('data-country');
-      statusCard.style.removeProperty('--flag-gradient');
-    }
+        if (countryCode) {
+          var colors = generateFlagColors(countryCode);
+          var gradient = 'linear-gradient(135deg, ' + colors[0] + ' 0%, ' + colors[1] + ' 50%, ' + colors[2] + ' 100%)';
+          statusCard.setAttribute('data-country', countryCode);
+          statusCard.style.setProperty('--flag-gradient', gradient);
+        } else {
+          statusCard.removeAttribute('data-country');
+          statusCard.style.removeProperty('--flag-gradient');
+        }
+      });
+    } catch (_) {}
   }
   
   // Run detection multiple times

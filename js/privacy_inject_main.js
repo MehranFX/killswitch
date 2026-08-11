@@ -76,22 +76,30 @@
         if (navigator.geolocation) {
             
             Object.defineProperty(navigator.geolocation, 'getCurrentPosition', {
-                value: function(success, error) {
-                    if (success) {
+                value: function(success, error, options) {
+                    if (typeof success === 'function') {
                         setTimeout(() => {
-                            success({
-                                coords: {
-                                    latitude: spoofedLat,
-                                    longitude: spoofedLng,
-                                    accuracy: 10,
-                                    altitude: null,
-                                    altitudeAccuracy: null,
-                                    heading: null,
-                                    speed: null
-                                },
-                                timestamp: Date.now()
-                            });
-                        }, Math.random() * 100 + 50);
+                            try {
+                                success({
+                                    coords: {
+                                        latitude: spoofedLat,
+                                        longitude: spoofedLng,
+                                        accuracy: 10,
+                                        altitude: null,
+                                        altitudeAccuracy: null,
+                                        heading: null,
+                                        speed: null
+                                    },
+                                    timestamp: Date.now()
+                                });
+                            } catch (_) {}
+                        }, Math.random() * 50 + 20);
+                    } else if (typeof error === 'function') {
+                        setTimeout(() => {
+                            try {
+                                error({ code: 1, message: 'User denied Geolocation' });
+                            } catch (_) {}
+                        }, 20);
                     }
                 },
                 writable: false,
@@ -99,24 +107,32 @@
             });
             
             Object.defineProperty(navigator.geolocation, 'watchPosition', {
-                value: function(success, error) {
-                    if (success) {
+                value: function(success, error, options) {
+                    if (typeof success === 'function') {
                         setTimeout(() => {
-                            success({
-                                coords: {
-                                    latitude: spoofedLat,
-                                    longitude: spoofedLng,
-                                    accuracy: 10,
-                                    altitude: null,
-                                    altitudeAccuracy: null,
-                                    heading: null,
-                                    speed: null
-                                },
-                                timestamp: Date.now()
-                            });
-                        }, Math.random() * 100 + 50);
+                            try {
+                                success({
+                                    coords: {
+                                        latitude: spoofedLat,
+                                        longitude: spoofedLng,
+                                        accuracy: 10,
+                                        altitude: null,
+                                        altitudeAccuracy: null,
+                                        heading: null,
+                                        speed: null
+                                    },
+                                    timestamp: Date.now()
+                                });
+                            } catch (_) {}
+                        }, Math.random() * 50 + 20);
+                    } else if (typeof error === 'function') {
+                        setTimeout(() => {
+                            try {
+                                error({ code: 1, message: 'User denied Geolocation' });
+                            } catch (_) {}
+                        }, 20);
                     }
-                    return 1; // fake watchId
+                    return Math.floor(Math.random() * 1000) + 1; // fake watchId
                 },
                 writable: false,
                 configurable: false

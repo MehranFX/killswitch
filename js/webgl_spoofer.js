@@ -1,54 +1,10 @@
 (function(){
   'use strict';
 
-  // Wait for settings to be synced from chrome.storage to localStorage
-  function waitForSettings(callback) {
-    let attempts = 0;
-    const maxAttempts = 50; // 5 seconds max wait
-    
-    function checkSettings() {
-      attempts++;
-      
-      try {
-        // Check if settings have been synced
-        if (localStorage.getItem('ks_settings_synced') === 'true') {
-          // Settings synced, check privacy settings
-          if (localStorage.getItem('ks_privacy_master') === 'off') { 
-            return; // Master privacy off, skip WebGL spoofing
-          }
-          if (localStorage.getItem('ks_webgl_protection') === 'off') { 
-            return; // WebGL protection off, skip WebGL spoofing
-          }
-          callback(); // Settings allow WebGL spoofing, proceed
-          return;
-        }
-        
-        // Settings not synced yet, wait a bit more
-        if (attempts < maxAttempts) {
-          setTimeout(checkSettings, 100);
-        } else {
-          // Timeout reached, check current localStorage values or apply defaults
-          try {
-            if (localStorage.getItem('ks_privacy_master') === 'off') { return; }
-            if (localStorage.getItem('ks_webgl_protection') === 'off') { return; }
-          } catch(_) {}
-          callback(); // Fallback: proceed with spoofing
-        }
-      } catch (e) {
-        // localStorage access failed, proceed with spoofing as fallback
-        if (attempts >= maxAttempts) {
-          callback();
-        } else {
-          setTimeout(checkSettings, 100);
-        }
-      }
-    }
-    
-    checkSettings();
-  }
-  
-  // Wait for settings before proceeding
-  waitForSettings(() => {
+  try {
+    if (localStorage.getItem('ks_privacy_master') === 'off') return;
+    if (localStorage.getItem('ks_webgl_protection') === 'off') return;
+  } catch (_) {}
 
   if (window.__ksWebglSpoofApplied) return;
   window.__ksWebglSpoofApplied = true;
@@ -61,70 +17,16 @@
   const UNMASKED_VENDOR = 0x9245;
   const UNMASKED_RENDERER = 0x9246;
 
-  // Consistent vendor-renderer pairs to avoid detection
+  // Standard Chrome ANGLE format vendor-renderer pairs
   const vendorRendererPairs = [
-    // Intel Graphics
-    { vendor: 'Intel Inc.', renderer: 'Intel(R) UHD Graphics 620' },
-    { vendor: 'Intel Inc.', renderer: 'Intel(R) UHD Graphics 630' },
-    { vendor: 'Intel Inc.', renderer: 'Intel(R) HD Graphics 4000' },
-    { vendor: 'Intel Inc.', renderer: 'Intel(R) HD Graphics 520' },
-    { vendor: 'Intel Inc.', renderer: 'Intel(R) HD Graphics 530' },
-    { vendor: 'Intel Inc.', renderer: 'Intel(R) Iris Xe Graphics' },
-    { vendor: 'Intel Inc.', renderer: 'Intel(R) Iris Pro Graphics 5200' },
-    { vendor: 'Intel Inc.', renderer: 'Intel(R) HD Graphics 4600' },
-    
-    // NVIDIA Graphics
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce GTX 1060' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce GTX 1070' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce GTX 1080' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce RTX 2060' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce RTX 3060' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce RTX 3070' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce RTX 4060' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce RTX 4070' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce GTX 1660' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce GTX 1650' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce MX150' },
-    { vendor: 'NVIDIA Corporation', renderer: 'NVIDIA GeForce MX250' },
-    
-    // AMD Graphics
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 580' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 6600' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 570' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 5700' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 6700 XT' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 7600' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 550' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 560' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 480' },
-    { vendor: 'AMD', renderer: 'AMD Radeon RX 470' },
-    { vendor: 'AMD', renderer: 'AMD Radeon R9 390' },
-    { vendor: 'AMD', renderer: 'AMD Radeon R7 370' },
-    
-    // Qualcomm Mobile Graphics
-    { vendor: 'Qualcomm', renderer: 'Adreno 640' },
-    { vendor: 'Qualcomm', renderer: 'Adreno 650' },
-    { vendor: 'Qualcomm', renderer: 'Adreno 530' },
-    { vendor: 'Qualcomm', renderer: 'Adreno 630' },
-    { vendor: 'Qualcomm', renderer: 'Adreno 540' },
-    { vendor: 'Qualcomm', renderer: 'Adreno 430' },
-    
-    // Apple Graphics (for Mac users)
-    { vendor: 'Apple Inc.', renderer: 'Apple M1' },
-    { vendor: 'Apple Inc.', renderer: 'Apple M2' },
-    { vendor: 'Apple Inc.', renderer: 'Apple M1 Pro' },
-    { vendor: 'Apple Inc.', renderer: 'Apple M1 Max' },
-    
-    // ARM Mali Graphics
-    { vendor: 'ARM', renderer: 'Mali-G78 MP14' },
-    { vendor: 'ARM', renderer: 'Mali-G76 MP16' },
-    { vendor: 'ARM', renderer: 'Mali-G72 MP18' },
-    { vendor: 'ARM', renderer: 'Mali-G710 MP7' },
-    
-    // PowerVR Graphics
-    { vendor: 'Imagination Technologies', renderer: 'PowerVR SGX543' },
-    { vendor: 'Imagination Technologies', renderer: 'PowerVR SGX554' },
-    { vendor: 'Imagination Technologies', renderer: 'PowerVR GM9446' }
+    { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+    { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+    { vendor: 'Google Inc. (Intel)', renderer: 'ANGLE (Intel, Intel(R) Iris Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+    { vendor: 'Google Inc. (NVIDIA Corporation)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+    { vendor: 'Google Inc. (NVIDIA Corporation)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+    { vendor: 'Google Inc. (NVIDIA Corporation)', renderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+    { vendor: 'Google Inc. (AMD)', renderer: 'ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)' },
+    { vendor: 'Google Inc. (AMD)', renderer: 'ANGLE (AMD, AMD Radeon RX 6600 Direct3D11 vs_5_0 ps_5_0, D3D11)' }
   ];
 
   let seedStr; try{ seedStr = sessionStorage.getItem('ks_webgl_seed') || (sessionStorage.setItem('ks_webgl_seed', String(Math.random())), sessionStorage.getItem('ks_webgl_seed')); }catch(_e){ seedStr = String(Math.random()); }
@@ -168,59 +70,51 @@
     fake[0x0D56] = 24; // DEPTH_BITS
     fake[0x0D57] = 8; // STENCIL_BITS
 
+    // Save native originalGetParameter to preserve natural hardware parameters
+    const originalGetParameter = (typeof gl.getParameter === 'function') ? gl.getParameter.bind(gl) : null;
+
     // Unmasked vendor/renderer (fake)
     fake[UNMASKED_VENDOR] = fakeVendor;
     fake[UNMASKED_RENDERER] = fakeRenderer;
 
-    // Final override: never call original getParameter (prevents INVALID_ENUM)
-    gl.getParameter = function(pname){
+    // Natural override: spoof vendor/renderer and delegate all other parameters to native WebGL
+    gl.getParameter = function(pname) {
+      if (pname === UNMASKED_VENDOR || pname === 0x9245) return fakeVendor;
+      if (pname === UNMASKED_RENDERER || pname === 0x9246) return fakeRenderer;
       if (typeof pname === 'number' && pname in fake) return fake[pname];
-      
-      // Handle common WebGL parameters that might cause "Unimplemented type" errors
-      try {
-        // For unknown parameters, try to return a safe default based on parameter type
-        if (typeof pname === 'number') {
-          // Common WebGL parameter ranges and their expected return types
-          if (pname >= 0x0B00 && pname <= 0x0BFF) {
-            return false; // Boolean parameters
-          } else if (pname >= 0x0C00 && pname <= 0x0CFF) {
-            return 0; // Integer parameters
-          } else if (pname >= 0x0D00 && pname <= 0x0DFF) {
-            return 0; // Integer parameters
-          } else if (pname >= 0x1F00 && pname <= 0x1FFF) {
-            return ''; // String parameters
-          } else if (pname >= 0x8B00 && pname <= 0x8BFF) {
-            return 0; // Integer parameters
-          }
-        }
-        return 0;
-      } catch (e) {
-        return 0;
+      if (originalGetParameter) {
+        try {
+          return originalGetParameter(pname);
+        } catch (_) {}
       }
+      return 0;
     };
 
-    // Remove debug extension to block real unmasked values
+    // Ensure webgl_debug_renderer_info extension is listed as supported so native WebGL does not trigger INVALID_ENUM
     const originalGetSupportedExtensions = gl.getSupportedExtensions?.bind(gl);
-    if (originalGetSupportedExtensions){
-      gl.getSupportedExtensions = function(){
-        try{
+    if (originalGetSupportedExtensions) {
+      gl.getSupportedExtensions = function() {
+        try {
           const list = originalGetSupportedExtensions() || [];
-          return list.filter((n)=> n && n.toLowerCase() !== 'webgl_debug_renderer_info');
-        }catch(_e){ return []; }
+          if (!list.includes('WEBGL_debug_renderer_info')) {
+            list.push('WEBGL_debug_renderer_info');
+          }
+          return list;
+        } catch (_) { return ['WEBGL_debug_renderer_info']; }
       };
     }
 
     const originalGetExtension = (typeof gl.getExtension === 'function' && typeof gl.getExtension.bind === 'function')
       ? gl.getExtension.bind(gl)
-      : function(){ return null; };
-    gl.getExtension = function(name){
-      try{
+      : function() { return null; };
+    gl.getExtension = function(name) {
+      try {
         if (!name) return null;
-        if (String(name).toLowerCase() === 'webgl_debug_renderer_info'){
+        if (String(name).toLowerCase() === 'webgl_debug_renderer_info') {
           return { UNMASKED_VENDOR_WEBGL: UNMASKED_VENDOR, UNMASKED_RENDERER_WEBGL: UNMASKED_RENDERER };
         }
         return originalGetExtension(name);
-      }catch(_e){ return null; }
+      } catch (_) { return null; }
     };
 
     return gl;
@@ -247,6 +141,4 @@
       }, writable:false, configurable:false
     });
   }
-  
-  }); // End of waitForSettings callback
 })();

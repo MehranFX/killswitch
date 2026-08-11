@@ -4,20 +4,64 @@
 (function() {
     'use strict';
     
-    // Default to UTC initially to prevent real timezone leakage
-    const defaultOffset = 0; // UTC offset
-    const defaultTimezone = 'UTC';
+    const originalResolvedOptions = (window.Intl && window.Intl.DateTimeFormat && window.Intl.DateTimeFormat.prototype.resolvedOptions)
+        ? window.Intl.DateTimeFormat.prototype.resolvedOptions
+        : null;
+
+    function getActiveTimezone() {
+        if (window.__ks_boot_tz__) return window.__ks_boot_tz__;
+        if (originalResolvedOptions) {
+            try {
+                const opt = originalResolvedOptions.call(new window.Intl.DateTimeFormat());
+                if (opt && opt.timeZone) {
+                    return opt.timeZone;
+                }
+            } catch (_) {}
+        }
+        return 'UTC';
+    }
+
+    function getTimezoneOffsetMinutes(tzName) {
+        if (!tzName || tzName === 'UTC') return 0;
+        try {
+            const now = new Date();
+            const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+            const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tzName }));
+            return Math.round((utcDate.getTime() - tzDate.getTime()) / 60000);
+        } catch (_) {
+            return 0;
+        }
+    }
     
-    // Apply immediate UTC override to prevent real timezone capture
-    
-    // Override getTimezoneOffset immediately but keep it reconfigurable
-    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+    // Override getTimezoneOffset dynamically but keep it reconfigurable
     Object.defineProperty(Date.prototype, 'getTimezoneOffset', {
         value: function() {
-            return -defaultOffset;
+            const tz = getActiveTimezone();
+            return getTimezoneOffsetMinutes(tz);
         },
         writable: true,
-        configurable: true // Allow later reconfiguration
+        configurable: true
+    });
+
+    // Override Date string representations to align with spoofed timezone
+    const originalToTimeString = Date.prototype.toTimeString;
+    Object.defineProperty(Date.prototype, 'toTimeString', {
+        value: function() {
+            try {
+                const tz = getActiveTimezone();
+                const formatted = this.toLocaleTimeString('en-US', { timeZone: tz, hour12: false });
+                const offsetMin = getTimezoneOffsetMinutes(tz);
+                const absOffset = Math.abs(offsetMin);
+                const hours = String(Math.floor(absOffset / 60)).padStart(2, '0');
+                const mins = String(absOffset % 60).padStart(2, '0');
+                const sign = offsetMin <= 0 ? '+' : '-';
+                return `${formatted} GMT${sign}${hours}${mins} (${tz})`;
+            } catch (_) {
+                return originalToTimeString.call(this);
+            }
+        },
+        writable: true,
+        configurable: true
     });
     
     // Override Intl.DateTimeFormat immediately
@@ -28,11 +72,11 @@
                 try {
                     const options = originalResolvedOptions.call(this) || {};
                     if (typeof options === 'object') {
-                        options.timeZone = defaultTimezone;
+                        options.timeZone = getActiveTimezone();
                     }
                     return options;
                 } catch (e) {
-                    return { timeZone: defaultTimezone };
+                    return { timeZone: getActiveTimezone() };
                 }
             },
             writable: true,
