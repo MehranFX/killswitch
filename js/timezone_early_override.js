@@ -1,12 +1,11 @@
-// Early timezone override to prevent clonedData capture
-// This runs before any page scripts and immediately overrides Date APIs
+// Early timezone override to prevent timezone leaks on first load
+// Runs in MAIN world at document_start before any page scripts
 
 (function() {
     'use strict';
-    
-    const originalResolvedOptions = (window.Intl && window.Intl.DateTimeFormat && window.Intl.DateTimeFormat.prototype.resolvedOptions)
-        ? window.Intl.DateTimeFormat.prototype.resolvedOptions
-        : null;
+
+    if (window.__KS_TIMEZONE_EARLY_APPLIED__) return;
+    window.__KS_TIMEZONE_EARLY_APPLIED__ = true;
 
     function getActiveTimezone() {
         if (window.__ks_boot_tz__) {
@@ -20,106 +19,205 @@
         return 'UTC';
     }
 
-    function getTimezoneOffsetMinutes(tzName) {
+    function getTimezoneOffsetMinutes(tzName, date = new Date()) {
         if (!tzName || tzName === 'UTC') return 0;
         try {
-            const now = new Date();
-            const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-            const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tzName }));
+            const utcStr = date.toLocaleString('en-US', { timeZone: 'UTC' });
+            const tzStr = date.toLocaleString('en-US', { timeZone: tzName });
+            const utcDate = new Date(utcStr);
+            const tzDate = new Date(tzStr);
             return Math.round((utcDate.getTime() - tzDate.getTime()) / 60000);
         } catch (_) {
             return 0;
         }
     }
-    
-    // Override getTimezoneOffset dynamically but keep it reconfigurable
-    Object.defineProperty(Date.prototype, 'getTimezoneOffset', {
+
+    function getFormattedDateParts(dateObj, tzName) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: tzName,
+            weekday: 'short',
+            month: 'short',
+            day: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZoneName: 'long'
+        });
+        const parts = {};
+        formatter.formatToParts(dateObj).forEach(p => parts[p.type] = p.value);
+        return parts;
+    }
+
+    function formatFullDateString(dateObj, tzName) {
+        try {
+            const offsetMin = getTimezoneOffsetMinutes(tzName, dateObj);
+            const absOffset = Math.abs(offsetMin);
+            const hours = String(Math.floor(absOffset / 60)).padStart(2, '0');
+            const mins = String(absOffset % 60).padStart(2, '0');
+            const sign = offsetMin <= 0 ? '+' : '-';
+            const gmtOffsetStr = `GMT${sign}${hours}${mins}`;
+
+            const parts = getFormattedDateParts(dateObj, tzName);
+            const timeStr = `${parts.hour}:${parts.minute}:${parts.second}`;
+            const dateStr = `${parts.weekday} ${parts.month} ${parts.day} ${parts.year}`;
+            const tzNameLong = parts.timeZoneName || tzName;
+
+            return `${dateStr} ${timeStr} ${gmtOffsetStr} (${tzNameLong})`;
+        } catch (_) {
+            return dateObj.toString();
+        }
+    }
+
+    function formatTimeString(dateObj, tzName) {
+        try {
+            const offsetMin = getTimezoneOffsetMinutes(tzName, dateObj);
+            const absOffset = Math.abs(offsetMin);
+            const hours = String(Math.floor(absOffset / 60)).padStart(2, '0');
+            const mins = String(absOffset % 60).padStart(2, '0');
+            const sign = offsetMin <= 0 ? '+' : '-';
+            const gmtOffsetStr = `GMT${sign}${hours}${mins}`;
+
+            const parts = getFormattedDateParts(dateObj, tzName);
+            const timeStr = `${parts.hour}:${parts.minute}:${parts.second}`;
+            const tzNameLong = parts.timeZoneName || tzName;
+
+            return `${timeStr} ${gmtOffsetStr} (${tzNameLong})`;
+        } catch (_) {
+            return dateObj.toTimeString();
+        }
+    }
+
+    function formatDateString(dateObj, tzName) {
+        try {
+            const parts = getFormattedDateParts(dateObj, tzName);
+            return `${parts.weekday} ${parts.month} ${parts.day} ${parts.year}`;
+        } catch (_) {
+            return dateObj.toDateString();
+        }
+    }
+
+    // Preserve original Date prototype methods
+    const OrigDate = window.Date;
+    const origToLocaleString = OrigDate.prototype.toLocaleString;
+    const origToLocaleDateString = OrigDate.prototype.toLocaleDateString;
+    const origToLocaleTimeString = OrigDate.prototype.toLocaleTimeString;
+
+    // 1. Date.prototype.getTimezoneOffset
+    Object.defineProperty(OrigDate.prototype, 'getTimezoneOffset', {
         value: function() {
             const tz = getActiveTimezone();
-            return getTimezoneOffsetMinutes(tz);
+            return getTimezoneOffsetMinutes(tz, this);
         },
         writable: true,
         configurable: true
     });
 
-    // Override Date string representations to align with spoofed timezone
-    const originalToTimeString = Date.prototype.toTimeString;
-    Object.defineProperty(Date.prototype, 'toTimeString', {
+    // 2. Date.prototype.toString
+    Object.defineProperty(OrigDate.prototype, 'toString', {
         value: function() {
-            try {
-                const tz = getActiveTimezone();
-                const formatted = this.toLocaleTimeString('en-US', { timeZone: tz, hour12: false });
-                const offsetMin = getTimezoneOffsetMinutes(tz);
-                const absOffset = Math.abs(offsetMin);
-                const hours = String(Math.floor(absOffset / 60)).padStart(2, '0');
-                const mins = String(absOffset % 60).padStart(2, '0');
-                const sign = offsetMin <= 0 ? '+' : '-';
-                return `${formatted} GMT${sign}${hours}${mins} (${tz})`;
-            } catch (_) {
-                return originalToTimeString.call(this);
-            }
+            const tz = getActiveTimezone();
+            return formatFullDateString(this, tz);
         },
         writable: true,
         configurable: true
     });
-    
-    // Override Intl.DateTimeFormat immediately
-    if (window.Intl && window.Intl.DateTimeFormat && window.Intl.DateTimeFormat.prototype.resolvedOptions) {
-        const originalResolvedOptions = window.Intl.DateTimeFormat.prototype.resolvedOptions;
-        Object.defineProperty(window.Intl.DateTimeFormat.prototype, 'resolvedOptions', {
+
+    // 3. Date.prototype.toTimeString
+    Object.defineProperty(OrigDate.prototype, 'toTimeString', {
+        value: function() {
+            const tz = getActiveTimezone();
+            return formatTimeString(this, tz);
+        },
+        writable: true,
+        configurable: true
+    });
+
+    // 4. Date.prototype.toDateString
+    Object.defineProperty(OrigDate.prototype, 'toDateString', {
+        value: function() {
+            const tz = getActiveTimezone();
+            return formatDateString(this, tz);
+        },
+        writable: true,
+        configurable: true
+    });
+
+    // 5. Date.prototype.toLocaleString
+    Object.defineProperty(OrigDate.prototype, 'toLocaleString', {
+        value: function(locales, options) {
+            const opts = options ? Object.assign({}, options) : {};
+            if (!opts.timeZone) {
+                opts.timeZone = getActiveTimezone();
+            }
+            return origToLocaleString.call(this, locales, opts);
+        },
+        writable: true,
+        configurable: true
+    });
+
+    // 6. Date.prototype.toLocaleDateString
+    Object.defineProperty(OrigDate.prototype, 'toLocaleDateString', {
+        value: function(locales, options) {
+            const opts = options ? Object.assign({}, options) : {};
+            if (!opts.timeZone) {
+                opts.timeZone = getActiveTimezone();
+            }
+            return origToLocaleDateString.call(this, locales, opts);
+        },
+        writable: true,
+        configurable: true
+    });
+
+    // 7. Date.prototype.toLocaleTimeString
+    Object.defineProperty(OrigDate.prototype, 'toLocaleTimeString', {
+        value: function(locales, options) {
+            const opts = options ? Object.assign({}, options) : {};
+            if (!opts.timeZone) {
+                opts.timeZone = getActiveTimezone();
+            }
+            return origToLocaleTimeString.call(this, locales, opts);
+        },
+        writable: true,
+        configurable: true
+    });
+
+    // 8. Intl.DateTimeFormat Constructor & Prototype Override
+    if (window.Intl && window.Intl.DateTimeFormat) {
+        const OrigDateTimeFormat = window.Intl.DateTimeFormat;
+        const origResolvedOptions = OrigDateTimeFormat.prototype.resolvedOptions;
+
+        function SpoofedDateTimeFormat(locales, options) {
+            const opts = options ? Object.assign({}, options) : {};
+            if (!opts.timeZone) {
+                opts.timeZone = getActiveTimezone();
+            }
+            if (!(this instanceof SpoofedDateTimeFormat)) {
+                return SpoofedDateTimeFormat(locales, options);
+            }
+            return new OrigDateTimeFormat(locales, opts);
+        }
+
+        SpoofedDateTimeFormat.prototype = OrigDateTimeFormat.prototype;
+        if (OrigDateTimeFormat.supportedLocalesOf) {
+            SpoofedDateTimeFormat.supportedLocalesOf = OrigDateTimeFormat.supportedLocalesOf;
+        }
+
+        Object.defineProperty(OrigDateTimeFormat.prototype, 'resolvedOptions', {
             value: function() {
-                try {
-                    const options = originalResolvedOptions.call(this) || {};
-                    if (typeof options === 'object') {
-                        options.timeZone = getActiveTimezone();
-                    }
-                    return options;
-                } catch (e) {
-                    return { timeZone: getActiveTimezone() };
+                const res = origResolvedOptions.call(this);
+                if (res && typeof res === 'object') {
+                    res.timeZone = getActiveTimezone();
                 }
+                return res;
             },
             writable: true,
-            configurable: true // Allow later reconfiguration
+            configurable: true
         });
+
+        try {
+            window.Intl.DateTimeFormat = SpoofedDateTimeFormat;
+        } catch (_) {}
     }
-    
-    // Override Date constructor to ensure consistent timezone
-    const originalDate = window.Date;
-    const OriginalDateConstructor = originalDate;
-    
-    function SpoofedDate(...args) {
-        if (args.length === 0) {
-            // new Date() - current time
-            const date = new OriginalDateConstructor();
-            return date;
-        } else {
-            // new Date(value) or new Date(year, month, ...)
-            return new OriginalDateConstructor(...args);
-        }
-    }
-    
-    // Copy all static methods and properties
-    Object.setPrototypeOf(SpoofedDate, OriginalDateConstructor);
-    Object.setPrototypeOf(SpoofedDate.prototype, OriginalDateConstructor.prototype);
-    
-    // Copy static methods
-    SpoofedDate.now = OriginalDateConstructor.now;
-    SpoofedDate.parse = OriginalDateConstructor.parse;
-    SpoofedDate.UTC = OriginalDateConstructor.UTC;
-    
-    // Override window.Date
-    try {
-        Object.defineProperty(window, 'Date', {
-            value: SpoofedDate,
-            writable: true,
-            configurable: true // Allow later reconfiguration
-        });
-    } catch (e) {
-        // Silently fail - some sites prevent this override
-    }
-    
-    // Early override applied
-    
-    // Mark that early override was applied
-    window.__KS_TIMEZONE_EARLY_APPLIED__ = true;
 })();

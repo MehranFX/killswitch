@@ -1246,8 +1246,7 @@ class BackgroundManager {
                 url.startsWith('chrome-extension://') ||
                 url.startsWith('moz-extension://') ||
                 url.startsWith('edge-extension://') ||
-                url.startsWith('about:') ||
-                url.startsWith('file://')) {
+                url.startsWith('about:')) {
                 return;
             }
             
