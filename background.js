@@ -303,6 +303,7 @@ class IPUtils {
 
     static async getCountryFromIP(ip) {
         const endpoints = [
+            `http://ip-api.com/json/${ip}?fields=status,countryCode`,
             `https://ipapi.co/${ip}/country/`,
             `https://ipwho.is/${ip}`
         ];
@@ -1053,7 +1054,38 @@ class BackgroundManager {
                 const stored = await chrome.storage.local.get(['current_ip', 'cachedIP']);
                 ip = stored.current_ip || stored.cachedIP || '';
             }
-            // Primary HTTPS endpoint: ipapi.co (official MaxMind/RIPE authoritative registry)
+
+            // 1. Primary Gold-Standard GeoIP endpoint: ip-api.com
+            // Accurately tracks dynamic VPN endpoints (ProtonVPN, M247, Datacamp, etc.) and physical exit countries
+            const ipApiUrl = ip 
+                ? `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,countryCode,timezone,lat,lon,query`
+                : 'http://ip-api.com/json/?fields=status,country,countryCode,timezone,lat,lon,query';
+            try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 4000);
+                const response = await fetch(ipApiUrl, {
+                    signal: controller.signal,
+                    cache: 'no-store'
+                });
+                clearTimeout(timer);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.status === 'success' && data.countryCode && data.timezone) {
+                        const cc = String(data.countryCode).toUpperCase();
+                        const detectedIP = data.query || ip;
+                        return {
+                            ip: detectedIP,
+                            country: cc,
+                            timezone: data.timezone,
+                            locale: this.getLocaleFromCountryCode(cc),
+                            latitude: data.lat,
+                            longitude: data.lon
+                        };
+                    }
+                }
+            } catch (_) {}
+
+            // 2. Secondary endpoint: ipapi.co
             const primaryUrl = ip ? `https://ipapi.co/${encodeURIComponent(ip)}/json/` : 'https://ipapi.co/json/';
             try {
                 const response = await fetch(primaryUrl, {
@@ -1077,7 +1109,7 @@ class BackgroundManager {
                 }
             } catch (_) {}
 
-            // Fallback HTTPS endpoint: ipwho.is
+            // 3. Fallback HTTPS endpoint: ipwho.is
             const fallbackUrl = ip ? `https://ipwho.is/${encodeURIComponent(ip)}` : 'https://ipwho.is/';
             try {
                 const response = await fetch(fallbackUrl, { cache: 'no-store' });

@@ -230,7 +230,7 @@
     'TC': {name: 'Turks and Caicos Islands', flag: '🇹🇨', colors: ['#00247D', '#FFFFFF', '#CE1126']},
     'TD': {name: 'Chad', flag: '🇹🇩', colors: ['#002868', '#FFD700', '#C8102E']},
     'TF': {name: 'French Southern Territories', flag: '🇹🇫', colors: ['#002395', '#FFFFFF', '#ED2939']},
-    'TG': {name: 'Togo', flag: '🇹🇬', colors: ['#FF0000', '#FFD700', '#0000FF']},
+    'TG': {name: 'Togo', flag: '🇹🇬', colors: ['#006A4E', '#FFCE00', '#D21034', '#FFFFFF']},
     'TH': {name: 'Thailand', flag: '🇹🇭', colors: ['#ED1C24', '#FFFFFF', '#241D4F']},
     'TJ': {name: 'Tajikistan', flag: '🇹🇯', colors: ['#CC0000', '#FFFFFF', '#009900']},
     'TK': {name: 'Tokelau', flag: '🇹🇰', colors: ['#00247D', '#FFD100', '#FFFFFF']},

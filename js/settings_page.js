@@ -100,6 +100,22 @@
   async function fetchIPLocation() {
     try {
       try {
+        const response = await fetch('http://ip-api.com/json/?fields=status,country,countryCode,timezone,lat,lon');
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.status === 'success' && data.countryCode && data.timezone) {
+            const cc = String(data.countryCode).toUpperCase();
+            return {
+              timezone: data.timezone,
+              locale: getLocaleFromCountryCode(cc),
+              latitude: data.lat,
+              longitude: data.lon
+            };
+          }
+        }
+      } catch (_) {}
+
+      try {
         const response = await fetch('https://ipapi.co/json/', {
           cache: 'no-store',
           headers: { 'User-Agent': 'Mozilla/5.0' }
