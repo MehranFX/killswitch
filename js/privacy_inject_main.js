@@ -90,8 +90,48 @@
     function applyCanvas() {
         if (!window.HTMLCanvasElement) return;
         try {
+            // Automatically set willReadFrequently: true on 2D canvas contexts
+            // to suppress Chromium readback warning and optimize performance on chart/canvas-heavy sites (e.g. TradingView)
+            if (HTMLCanvasElement.prototype.getContext) {
+                const origGetContext = HTMLCanvasElement.prototype.getContext;
+                HTMLCanvasElement.prototype.getContext = function(type, options) {
+                    if (type === '2d') {
+                        if (!options || typeof options !== 'object') {
+                            options = { willReadFrequently: true };
+                        } else if (options.willReadFrequently === undefined) {
+                            try {
+                                options = Object.assign({}, options, { willReadFrequently: true });
+                            } catch (_) {
+                                try { options.willReadFrequently = true; } catch (__) {}
+                            }
+                        }
+                    }
+                    return origGetContext.call(this, type, options);
+                };
+            }
+
+            if (window.OffscreenCanvas && OffscreenCanvas.prototype.getContext) {
+                const origOffscreenGetContext = OffscreenCanvas.prototype.getContext;
+                OffscreenCanvas.prototype.getContext = function(type, options) {
+                    if (type === '2d') {
+                        if (!options || typeof options !== 'object') {
+                            options = { willReadFrequently: true };
+                        } else if (options.willReadFrequently === undefined) {
+                            try {
+                                options = Object.assign({}, options, { willReadFrequently: true });
+                            } catch (_) {
+                                try { options.willReadFrequently = true; } catch (__) {}
+                            }
+                        }
+                    }
+                    return origOffscreenGetContext.call(this, type, options);
+                };
+            }
+
             const addNoise = (imageData) => {
                 if (!imageData || !imageData.data) return;
+                // Only spoof fingerprinting probes (typically under 500x500), avoiding overhead on large interactive charts
+                if (imageData.width > 500 || imageData.height > 500) return;
                 for (let i = 0; i < imageData.data.length; i += 4) {
                     imageData.data[i] = Math.min(255, Math.max(0, imageData.data[i] + (Math.floor(Math.random() * 3) - 1)));
                 }
@@ -110,10 +150,13 @@
                 const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
                 HTMLCanvasElement.prototype.toDataURL = function() {
                     try {
-                        const ctx = this.getContext('2d');
-                        if (ctx) {
-                            const imgData = ctx.getImageData(0, 0, this.width, this.height);
-                            ctx.putImageData(imgData, 0, 0);
+                        if (this.width > 0 && this.height > 0 && this.width <= 500 && this.height <= 500) {
+                            const ctx = this.getContext('2d', { willReadFrequently: true });
+                            if (ctx) {
+                                const imgData = ctx.getImageData(0, 0, this.width, this.height);
+                                addNoise(imgData);
+                                ctx.putImageData(imgData, 0, 0);
+                            }
                         }
                     } catch (_) {}
                     return origToDataURL.apply(this, arguments);

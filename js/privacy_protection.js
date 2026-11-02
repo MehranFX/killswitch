@@ -201,6 +201,24 @@
     
     function protectCanvasFingerprinting() {
         try {
+            if (HTMLCanvasElement.prototype.getContext) {
+                const origGetContext = HTMLCanvasElement.prototype.getContext;
+                HTMLCanvasElement.prototype.getContext = function(type, options) {
+                    if (type === '2d') {
+                        if (!options || typeof options !== 'object') {
+                            options = { willReadFrequently: true };
+                        } else if (options.willReadFrequently === undefined) {
+                            try {
+                                options = Object.assign({}, options, { willReadFrequently: true });
+                            } catch (_) {
+                                try { options.willReadFrequently = true; } catch (__) {}
+                            }
+                        }
+                    }
+                    return origGetContext.call(this, type, options);
+                };
+            }
+
             // Override toDataURL
             const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
             HTMLCanvasElement.prototype.toDataURL = function() {
@@ -225,7 +243,8 @@
             
             // Helper function to add noise
             function addCanvasNoise(canvas) {
-                const ctx = canvas.getContext('2d');
+                if (canvas.width > 500 || canvas.height > 500) return;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
                 if (ctx) {
                     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     addNoiseToImageData(imageData);
@@ -234,6 +253,7 @@
             }
             
             function addNoiseToImageData(imageData) {
+                if (!imageData || !imageData.data || imageData.width > 500 || imageData.height > 500) return;
                 for (let i = 0; i < imageData.data.length; i += 4) {
                     imageData.data[i] += Math.floor(Math.random() * 5) - 2; // R
                     imageData.data[i + 1] += Math.floor(Math.random() * 5) - 2; // G
