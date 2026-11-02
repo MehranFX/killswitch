@@ -6,11 +6,12 @@
 function probeIPInPageContext() {
     const endpoints = [
         'https://api.ipify.org?format=json',
-        'https://ipwho.is/'
+        'https://api64.ipify.org?format=json',
+        'https://icanhazip.com'
     ];
     const parseIP = async (url) => {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 5000);
+        const timer = setTimeout(() => controller.abort(), 4000);
         try {
             const res = await fetch(url, {
                 cache: 'no-store',
@@ -19,8 +20,15 @@ function probeIPInPageContext() {
             });
             clearTimeout(timer);
             if (!res.ok) return '';
-            const data = await res.json().catch(() => ({}));
-            return (data && data.ip) || '';
+            const text = await res.text();
+            let ip = '';
+            try {
+                const data = JSON.parse(text);
+                ip = data.ip || '';
+            } catch (_) {
+                ip = text.trim();
+            }
+            return ip.replace(/[^0-9A-Fa-f:\.]/g, '');
         } catch (_) {
             clearTimeout(timer);
             return '';
@@ -28,7 +36,7 @@ function probeIPInPageContext() {
     };
     return (async () => {
         for (const url of endpoints) {
-            const ip = (await parseIP(url)).trim();
+            const ip = await parseIP(url);
             if (ip) return ip;
         }
         return '';
@@ -208,12 +216,14 @@ class IPUtils {
     }
 
     static async getPublicIPRespectingProxy() {
-        if (await this.isBrowserProxyLikelyActive()) {
-            try {
-                const ip = await this.getPublicIPViaActiveTab();
-                if (ValidationUtils.isValidIP(ip)) return ip;
-            } catch (_) {}
-        }
+        // 1. Always prioritize checking through active browser tab if available
+        // A web tab accurately follows the exact system/VPN/proxy network route that pages like ping.eu see
+        try {
+            const ip = await this.getPublicIPViaActiveTab();
+            if (ValidationUtils.isValidIP(ip)) return ip;
+        } catch (_) {}
+
+        // 2. Fallback to extension service worker fetch
         return this.getPublicIP();
     }
 
@@ -840,14 +850,12 @@ class BackgroundManager {
                 freshIP = await IPUtils.getPublicIPRespectingProxy();
             } catch (_) {}
 
-            const ipLocation = await this.fetchIPLocation(freshIP);
-            if (!ValidationUtils.isValidIP(freshIP) && ipLocation && ipLocation.ip) {
-                freshIP = ipLocation.ip;
-            }
             if (!ValidationUtils.isValidIP(freshIP)) {
                 const stored = await chrome.storage.local.get(['current_ip', 'cachedIP']);
                 freshIP = stored.current_ip || stored.cachedIP || '';
             }
+
+            const ipLocation = ValidationUtils.isValidIP(freshIP) ? await this.fetchIPLocation(freshIP) : null;
 
             if (ValidationUtils.isValidIP(freshIP)) {
             const now = Date.now();
@@ -1054,12 +1062,13 @@ class BackgroundManager {
                 const stored = await chrome.storage.local.get(['current_ip', 'cachedIP']);
                 ip = stored.current_ip || stored.cachedIP || '';
             }
+            if (!ValidationUtils.isValidIP(ip)) {
+                return null;
+            }
 
             // 1. Primary Gold-Standard GeoIP endpoint: ip-api.com
             // Accurately tracks dynamic VPN endpoints (ProtonVPN, M247, Datacamp, etc.) and physical exit countries
-            const ipApiUrl = ip 
-                ? `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,countryCode,timezone,lat,lon,query`
-                : 'http://ip-api.com/json/?fields=status,country,countryCode,timezone,lat,lon,query';
+            const ipApiUrl = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,countryCode,timezone,lat,lon,query`;
             try {
                 const controller = new AbortController();
                 const timer = setTimeout(() => controller.abort(), 4000);
@@ -1072,9 +1081,8 @@ class BackgroundManager {
                     const data = await response.json();
                     if (data && data.status === 'success' && data.countryCode && data.timezone) {
                         const cc = String(data.countryCode).toUpperCase();
-                        const detectedIP = data.query || ip;
                         return {
-                            ip: detectedIP,
+                            ip: ip,
                             country: cc,
                             timezone: data.timezone,
                             locale: this.getLocaleFromCountryCode(cc),
@@ -1086,7 +1094,7 @@ class BackgroundManager {
             } catch (_) {}
 
             // 2. Secondary endpoint: ipapi.co
-            const primaryUrl = ip ? `https://ipapi.co/${encodeURIComponent(ip)}/json/` : 'https://ipapi.co/json/';
+            const primaryUrl = `https://ipapi.co/${encodeURIComponent(ip)}/json/`;
             try {
                 const response = await fetch(primaryUrl, {
                     cache: 'no-store',
@@ -1096,9 +1104,8 @@ class BackgroundManager {
                     const data = await response.json();
                     if (data && data.country_code && data.timezone && !data.error) {
                         const cc = (data.country_code || data.countryCode || '').toUpperCase();
-                        const detectedIP = data.ip || ip;
                         return {
-                            ip: detectedIP,
+                            ip: ip,
                             country: cc,
                             timezone: data.timezone,
                             locale: this.getLocaleFromCountryCode(cc),
@@ -1110,7 +1117,7 @@ class BackgroundManager {
             } catch (_) {}
 
             // 3. Fallback HTTPS endpoint: ipwho.is
-            const fallbackUrl = ip ? `https://ipwho.is/${encodeURIComponent(ip)}` : 'https://ipwho.is/';
+            const fallbackUrl = `https://ipwho.is/${encodeURIComponent(ip)}`;
             try {
                 const response = await fetch(fallbackUrl, { cache: 'no-store' });
                 if (response.ok) {
