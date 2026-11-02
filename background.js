@@ -2,20 +2,42 @@
 
 /**
  * Run inside a normal web tab so Chrome applies system/browser proxy routing.
+ * MUST be declared as async so chrome.scripting.executeScript awaits the promise!
  */
-function probeIPInPageContext() {
+async function probeIPInPageContext() {
+    // 1. Direct DOM inspection if on an IP detection website (ping.eu, whatismyip, ipleak, etc.)
+    try {
+        const text = (document.body && document.body.innerText) || '';
+        const host = (window.location && window.location.hostname) || '';
+        if (host.includes('ping.eu')) {
+            const m = text.match(/Your IP is\s+([0-9a-fA-F:.]+)/i) || text.match(/\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/);
+            if (m && m[1]) return m[1].trim();
+            if (m && m[0]) return m[0].trim();
+        }
+        if (/whatismyip|ipleak|ipinfo|showmyip|checkip|myip/i.test(host)) {
+            const m = text.match(/\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/);
+            if (m && m[0]) return m[0].trim();
+        }
+    } catch (_) {}
+
+    // 2. Fetch through tab network stack (inherits VPN / Proxy routing)
+    const isHttp = (window.location && window.location.protocol === 'http:');
     const endpoints = [
-        'https://api.ipify.org?format=json',
+        isHttp ? 'http://api.ipify.org?format=json' : 'https://api.ipify.org?format=json',
+        isHttp ? 'http://icanhazip.com' : 'https://icanhazip.com',
         'https://api64.ipify.org?format=json',
-        'https://icanhazip.com'
+        'https://api.ipify.org?format=json',
+        'https://icanhazip.com',
+        'https://ifconfig.me/ip'
     ];
+
     const parseIP = async (url) => {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 4000);
+        const timer = setTimeout(() => controller.abort(), 3500);
         try {
             const res = await fetch(url, {
                 cache: 'no-store',
-                headers: { 'Cache-Control': 'no-cache' },
+                headers: { 'Accept': 'application/json, text/plain, */*' },
                 signal: controller.signal
             });
             clearTimeout(timer);
@@ -34,13 +56,12 @@ function probeIPInPageContext() {
             return '';
         }
     };
-    return (async () => {
-        for (const url of endpoints) {
-            const ip = await parseIP(url);
-            if (ip) return ip;
-        }
-        return '';
-    })();
+
+    for (const url of endpoints) {
+        const ip = await parseIP(url);
+        if (ip && ip.length >= 7) return ip;
+    }
+    return '';
 }
 
 /**
@@ -178,12 +199,12 @@ class IPUtils {
     }
 
     static async _fetchIPFromTab(tabId) {
-        const [{ result }] = await chrome.scripting.executeScript({
+        const results = await chrome.scripting.executeScript({
             target: { tabId },
             func: probeIPInPageContext
         });
-        const ip = (result || '').trim();
-        if (!ip) throw new Error('Empty IP from tab');
+        const ip = (results && results[0] && results[0].result ? String(results[0].result) : '').trim();
+        if (!ValidationUtils.isValidIP(ip)) throw new Error('Empty or invalid IP from tab: ' + ip);
         return ip;
     }
 
@@ -203,16 +224,45 @@ class IPUtils {
      * Fetch public IP inside an open tab so system/browser proxy routing is respected.
      */
     static async getPublicIPViaActiveTab() {
-        let tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        let tab = tabs && tabs[0];
-        if (!tab || !tab.id || !tab.url || !/^https?:/i.test(tab.url)) {
-            const allTabs = await chrome.tabs.query({});
-            tab = allTabs.find(t => t && t.id && t.url && /^https?:/i.test(t.url));
-        }
-        if (!tab || !tab.id) {
+        const candidateTabs = [];
+        try {
+            const active = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            if (active && active.length) candidateTabs.push(...active);
+        } catch (_) {}
+        try {
+            const active = await chrome.tabs.query({ active: true });
+            if (active && active.length) {
+                for (const t of active) {
+                    if (!candidateTabs.some(c => c.id === t.id)) candidateTabs.push(t);
+                }
+            }
+        } catch (_) {}
+        try {
+            const all = await chrome.tabs.query({});
+            if (all && all.length) {
+                for (const t of all) {
+                    if (!candidateTabs.some(c => c.id === t.id)) candidateTabs.push(t);
+                }
+            }
+        } catch (_) {}
+
+        const httpTabs = candidateTabs.filter(t => t && t.id && t.url && /^https?:/i.test(t.url));
+        if (httpTabs.length === 0) {
             throw new Error('No http(s) tab found');
         }
-        return this._fetchIPFromTab(tab.id);
+
+        let lastErr = null;
+        for (const t of httpTabs) {
+            try {
+                const ip = await this._fetchIPFromTab(t.id);
+                if (ValidationUtils.isValidIP(ip)) {
+                    return ip;
+                }
+            } catch (err) {
+                lastErr = err;
+            }
+        }
+        throw (lastErr || new Error('Failed to probe IP from all candidate tabs'));
     }
 
     static async getPublicIPRespectingProxy() {

@@ -536,6 +536,12 @@ class PopupManager {
             // Update IP display
             await this.updateIPDisplay();
             
+            // Check if IP is fresh (< 3s old), otherwise silently refresh in background
+            const now = Date.now();
+            if (!initialStorage.last_ip_update || (now - initialStorage.last_ip_update) > 3000) {
+                chrome.runtime.sendMessage({ type: "refreshIP" }).catch(() => {});
+            }
+            
             // Update countdown
             this.updateCountdown();
             
