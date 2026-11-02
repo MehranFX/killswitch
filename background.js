@@ -303,8 +303,8 @@ class IPUtils {
 
     static async getCountryFromIP(ip) {
         const endpoints = [
-            `https://ipwho.is/${ip}`,
-            `https://ipapi.co/${ip}/country/`
+            `https://ipapi.co/${ip}/country/`,
+            `https://ipwho.is/${ip}`
         ];
 
         for (const url of endpoints) {
@@ -1053,10 +1053,34 @@ class BackgroundManager {
                 const stored = await chrome.storage.local.get(['current_ip', 'cachedIP']);
                 ip = stored.current_ip || stored.cachedIP || '';
             }
-            // Primary HTTPS endpoint: ipwho.is
-            const primaryUrl = ip ? `https://ipwho.is/${encodeURIComponent(ip)}` : 'https://ipwho.is/';
+            // Primary HTTPS endpoint: ipapi.co (official MaxMind/RIPE authoritative registry)
+            const primaryUrl = ip ? `https://ipapi.co/${encodeURIComponent(ip)}/json/` : 'https://ipapi.co/json/';
             try {
-                const response = await fetch(primaryUrl, { cache: 'no-store' });
+                const response = await fetch(primaryUrl, {
+                    cache: 'no-store',
+                    headers: { 'User-Agent': 'Mozilla/5.0' }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.country_code && data.timezone && !data.error) {
+                        const cc = (data.country_code || data.countryCode || '').toUpperCase();
+                        const detectedIP = data.ip || ip;
+                        return {
+                            ip: detectedIP,
+                            country: cc,
+                            timezone: data.timezone,
+                            locale: this.getLocaleFromCountryCode(cc),
+                            latitude: data.latitude,
+                            longitude: data.longitude
+                        };
+                    }
+                }
+            } catch (_) {}
+
+            // Fallback HTTPS endpoint: ipwho.is
+            const fallbackUrl = ip ? `https://ipwho.is/${encodeURIComponent(ip)}` : 'https://ipwho.is/';
+            try {
+                const response = await fetch(fallbackUrl, { cache: 'no-store' });
                 if (response.ok) {
                     const data = await response.json();
                     if (data && (data.success !== false)) {
@@ -1075,25 +1099,6 @@ class BackgroundManager {
                                 longitude: lon
                             };
                         }
-                    }
-                }
-            } catch (_) {}
-
-            // Fallback HTTPS endpoint: ipapi.co
-            const fallbackUrl = ip ? `https://ipapi.co/${encodeURIComponent(ip)}/json/` : 'https://ipapi.co/json/';
-            try {
-                const response = await fetch(fallbackUrl, { cache: 'no-store' });
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && data.timezone) {
-                        const cc = (data.country_code || data.countryCode || '').toUpperCase();
-                        return {
-                            country: cc,
-                            timezone: data.timezone,
-                            locale: this.getLocaleFromCountryCode(cc),
-                            latitude: data.latitude,
-                            longitude: data.longitude
-                        };
                     }
                 }
             } catch (_) {}

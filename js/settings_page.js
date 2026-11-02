@@ -99,6 +99,25 @@
 
   async function fetchIPLocation() {
     try {
+      try {
+        const response = await fetch('https://ipapi.co/json/', {
+          cache: 'no-store',
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.country_code && data.timezone && !data.error) {
+            const cc = (data.country_code || data.countryCode || '').toUpperCase();
+            return {
+              timezone: data.timezone,
+              locale: getLocaleFromCountryCode(cc),
+              latitude: data.latitude,
+              longitude: data.longitude
+            };
+          }
+        }
+      } catch (_) {}
+
       const response = await fetch('https://ipwho.is/');
       if (response.ok) {
         const data = await response.json();
