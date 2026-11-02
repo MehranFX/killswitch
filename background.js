@@ -5,16 +5,34 @@
  * MUST be declared as async so chrome.scripting.executeScript awaits the promise!
  */
 async function probeIPInPageContext() {
-    // 1. Direct DOM inspection if on an IP detection website (ping.eu, whatismyip, ipleak, etc.)
+    // 1. Instant DOM / Input inspection if active tab is on an IP detection website (ping.eu, whatismyip, ipleak, etc.)
     try {
-        const text = (document.body && document.body.innerText) || '';
         const host = (window.location && window.location.hostname) || '';
+        const html = (document.body && document.body.innerHTML) || '';
+        const text = (document.body && document.body.innerText) || '';
+        
+        // ping.eu specifically
         if (host.includes('ping.eu')) {
-            const m = text.match(/Your IP is\s+([0-9a-fA-F:.]+)/i) || text.match(/\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/);
-            if (m && m[1]) return m[1].trim();
-            if (m && m[0]) return m[0].trim();
+            // Check HTML for "Your IP is <b>...</b>" or links
+            const mHtml = html.match(/Your\s+IP\s+is[^\d]*((?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))/i);
+            if (mHtml && mHtml[1]) return mHtml[1].trim();
+
+            // Check input field (e.g. "IP address or host name:")
+            const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
+            for (const input of inputs) {
+                const val = (input.value || '').trim();
+                if (/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(val)) {
+                    return val;
+                }
+            }
+            
+            // Check text
+            const mText = text.match(/Your\s+IP\s+is[^\d]*((?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))/i);
+            if (mText && mText[1]) return mText[1].trim();
         }
-        if (/whatismyip|ipleak|ipinfo|showmyip|checkip|myip/i.test(host)) {
+
+        // Generic IP checker sites
+        if (/whatismyip|ipleak|ipinfo|showmyip|checkip|myip|ipaddress/i.test(host)) {
             const m = text.match(/\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/);
             if (m && m[0]) return m[0].trim();
         }
@@ -23,9 +41,9 @@ async function probeIPInPageContext() {
     // 2. Fetch through tab network stack (inherits VPN / Proxy routing)
     const isHttp = (window.location && window.location.protocol === 'http:');
     const endpoints = [
-        isHttp ? 'http://api.ipify.org?format=json' : 'https://api.ipify.org?format=json',
+        isHttp ? 'http://ip-api.com/json/?fields=query' : 'https://api.ipify.org?format=json',
+        isHttp ? 'http://api.ipify.org?format=json' : 'https://api64.ipify.org?format=json',
         isHttp ? 'http://icanhazip.com' : 'https://icanhazip.com',
-        'https://api64.ipify.org?format=json',
         'https://api.ipify.org?format=json',
         'https://icanhazip.com',
         'https://ifconfig.me/ip'
@@ -46,7 +64,7 @@ async function probeIPInPageContext() {
             let ip = '';
             try {
                 const data = JSON.parse(text);
-                ip = data.ip || '';
+                ip = data.query || data.ip || '';
             } catch (_) {
                 ip = text.trim();
             }
@@ -225,34 +243,63 @@ class IPUtils {
      */
     static async getPublicIPViaActiveTab() {
         const candidateTabs = [];
+
+        // 1. Specifically get the active tab of the last focused normal browser window
         try {
-            const active = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-            if (active && active.length) candidateTabs.push(...active);
+            const normalWins = await chrome.windows.getAll({ windowTypes: ['normal'], populate: true });
+            if (normalWins && normalWins.length > 0) {
+                const focusedWin = normalWins.find(w => w.focused) || normalWins[0];
+                if (focusedWin && focusedWin.tabs) {
+                    const activeTab = focusedWin.tabs.find(t => t.active);
+                    if (activeTab && activeTab.url && /^https?:/i.test(activeTab.url)) {
+                        candidateTabs.push(activeTab);
+                    }
+                    // Prioritize tabs with IP-checking domains (e.g. ping.eu) to the front
+                    for (const t of focusedWin.tabs) {
+                        if (t.url && /ping\.eu|whatismyip|ipleak|ipinfo/i.test(t.url)) {
+                            if (!candidateTabs.some(c => c.id === t.id)) {
+                                candidateTabs.unshift(t);
+                            }
+                        }
+                    }
+                }
+            }
         } catch (_) {}
+
+        // 2. Active tabs across any windows
         try {
             const active = await chrome.tabs.query({ active: true });
             if (active && active.length) {
                 for (const t of active) {
-                    if (!candidateTabs.some(c => c.id === t.id)) candidateTabs.push(t);
-                }
-            }
-        } catch (_) {}
-        try {
-            const all = await chrome.tabs.query({});
-            if (all && all.length) {
-                for (const t of all) {
-                    if (!candidateTabs.some(c => c.id === t.id)) candidateTabs.push(t);
+                    if (t.url && /^https?:/i.test(t.url) && !candidateTabs.some(c => c.id === t.id)) {
+                        candidateTabs.push(t);
+                    }
                 }
             }
         } catch (_) {}
 
-        const httpTabs = candidateTabs.filter(t => t && t.id && t.url && /^https?:/i.test(t.url));
-        if (httpTabs.length === 0) {
+        // 3. Fallback to all http(s) tabs
+        try {
+            const all = await chrome.tabs.query({});
+            if (all && all.length) {
+                const pingTab = all.find(t => t.url && /ping\.eu/i.test(t.url));
+                if (pingTab && !candidateTabs.some(c => c.id === pingTab.id)) {
+                    candidateTabs.unshift(pingTab);
+                }
+                for (const t of all) {
+                    if (t.url && /^https?:/i.test(t.url) && !candidateTabs.some(c => c.id === t.id)) {
+                        candidateTabs.push(t);
+                    }
+                }
+            }
+        } catch (_) {}
+
+        if (candidateTabs.length === 0) {
             throw new Error('No http(s) tab found');
         }
 
         let lastErr = null;
-        for (const t of httpTabs) {
+        for (const t of candidateTabs) {
             try {
                 const ip = await this._fetchIPFromTab(t.id);
                 if (ValidationUtils.isValidIP(ip)) {
