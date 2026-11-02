@@ -377,7 +377,7 @@ class PopupManager {
             
             if (ipElement) {
                 const oldText = ipElement.textContent;
-                ipElement.textContent = `${flag ? flag + ' ' : ''}${ip || 'Loading...'}`;
+                ipElement.textContent = ip || 'Loading...';
                 // Ensure background stays transparent
                 ipElement.style.background = 'transparent';
                 // Log removed
@@ -431,11 +431,19 @@ class PopupManager {
                 if (localeElement) localeElement.textContent = 'Browser Default';
             } else if (result.location_config === 'matchIP') {
                 // Show IP-based location
-                const country = result.ip_country || '';
-                const flag = result.ip_flag || '';
-                const location = country ? `${flag} ${country}` : 'Unknown';
+                const country = (result.ip_country || '').toUpperCase();
+                const info = (window.getCountryInfo && country) ? window.getCountryInfo(country) : (window.COUNTRY_DATA?.[country] || null);
+                const countryName = info?.name || country || 'Unknown';
+                const flag = result.ip_flag || info?.flag || (window.countryCodeToFlag ? window.countryCodeToFlag(country) : '');
+                const location = country ? countryName : 'Unknown';
                 
                 if (locationElement) locationElement.textContent = location;
+                const cNameEl = document.getElementById('country_name_text');
+                if (cNameEl) cNameEl.textContent = countryName;
+                const cPillEl = document.getElementById('country_code_pill');
+                if (cPillEl) cPillEl.textContent = country || '--';
+                const fMedalEl = document.getElementById('flag_medal');
+                if (fMedalEl) fMedalEl.textContent = flag || '🌐';
                 if (timezoneElement) timezoneElement.textContent = result.timezone || 'Unknown';
                 if (localeElement) localeElement.textContent = result.locale || 'Unknown';
             } else if (result.location_config === 'custom') {

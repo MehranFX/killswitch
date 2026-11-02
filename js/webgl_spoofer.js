@@ -1,18 +1,17 @@
 (function(){
   'use strict';
 
-  try {
-    if (localStorage.getItem('ks_privacy_master') === 'off') return;
-    if (localStorage.getItem('ks_webgl_protection') === 'off') return;
-  } catch (_) {}
-
   if (window.__ksWebglSpoofApplied) return;
-  window.__ksWebglSpoofApplied = true;
-
-  // Hide WebGL INVALID_ENUM noise and privacy-related errors
-  try{
-    // Leave console.error untouched to avoid site compatibility issues
-  }catch(_e){}
+  try {
+    Object.defineProperty(window, '__ksWebglSpoofApplied', {
+      value: true,
+      writable: false,
+      enumerable: false,
+      configurable: false
+    });
+  } catch (_) {
+    window.__ksWebglSpoofApplied = true;
+  }
 
   const UNMASKED_VENDOR = 0x9245;
   const UNMASKED_RENDERER = 0x9246;
@@ -29,15 +28,18 @@
     { vendor: 'Google Inc. (AMD)', renderer: 'ANGLE (AMD, AMD Radeon RX 6600 Direct3D11 vs_5_0 ps_5_0, D3D11)' }
   ];
 
-  let seedStr; try{ seedStr = sessionStorage.getItem('ks_webgl_seed') || (sessionStorage.setItem('ks_webgl_seed', String(Math.random())), sessionStorage.getItem('ks_webgl_seed')); }catch(_e){ seedStr = String(Math.random()); }
-  const seedNum = Math.abs(Array.from(seedStr).reduce((a,c)=>((a<<5)-a)+c.charCodeAt(0)|0, 0)) || Math.floor(Math.random()*1e9);
+  const seedNum = Math.floor(Math.random() * vendorRendererPairs.length);
   const selectedPair = vendorRendererPairs[seedNum % vendorRendererPairs.length];
   const fakeVendor = selectedPair.vendor;
   const fakeRenderer = selectedPair.renderer;
 
   function patchContext(gl){
     if (!gl || gl.__ksPatched) return gl;
-    gl.__ksPatched = true;
+    try {
+      Object.defineProperty(gl, '__ksPatched', { value: true, enumerable: false, configurable: false });
+    } catch (_) {
+      gl.__ksPatched = true;
+    }
 
     // Comprehensive fake parameter map (safe, plausible values)
     const fake = Object.create(null);
@@ -78,7 +80,7 @@
     fake[UNMASKED_RENDERER] = fakeRenderer;
 
     // Natural override: spoof vendor/renderer and delegate all other parameters to native WebGL
-    gl.getParameter = function(pname) {
+    const spoofedGetParameter = function getParameter(pname) {
       if (pname === UNMASKED_VENDOR || pname === 0x9245) return fakeVendor;
       if (pname === UNMASKED_RENDERER || pname === 0x9246) return fakeRenderer;
       if (typeof pname === 'number' && pname in fake) return fake[pname];
@@ -89,11 +91,12 @@
       }
       return 0;
     };
+    gl.getParameter = spoofedGetParameter;
 
     // Ensure webgl_debug_renderer_info extension is listed as supported so native WebGL does not trigger INVALID_ENUM
     const originalGetSupportedExtensions = gl.getSupportedExtensions?.bind(gl);
     if (originalGetSupportedExtensions) {
-      gl.getSupportedExtensions = function() {
+      gl.getSupportedExtensions = function getSupportedExtensions() {
         try {
           const list = originalGetSupportedExtensions() || [];
           if (!list.includes('WEBGL_debug_renderer_info')) {
@@ -107,7 +110,7 @@
     const originalGetExtension = (typeof gl.getExtension === 'function' && typeof gl.getExtension.bind === 'function')
       ? gl.getExtension.bind(gl)
       : function() { return null; };
-    gl.getExtension = function(name) {
+    gl.getExtension = function getExtension(name) {
       try {
         if (!name) return null;
         if (String(name).toLowerCase() === 'webgl_debug_renderer_info') {
@@ -122,23 +125,27 @@
 
   if (window.HTMLCanvasElement && HTMLCanvasElement.prototype){
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    const spoofedGetContext = function getContext(type){
+      const ctx = originalGetContext.apply(this, arguments);
+      if (type && String(type).toLowerCase().includes('webgl')) return patchContext(ctx);
+      return ctx;
+    };
+    Object.defineProperty(spoofedGetContext, 'name', { value: 'getContext', configurable: true });
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-      value: function(type){
-        const ctx = originalGetContext.apply(this, arguments);
-        if (type && String(type).toLowerCase().includes('webgl')) return patchContext(ctx);
-        return ctx;
-      }, writable:false, configurable:false
+      value: spoofedGetContext, writable: true, configurable: true
     });
   }
 
   if (window.OffscreenCanvas && OffscreenCanvas.prototype){
     const originalOffscreenGetContext = OffscreenCanvas.prototype.getContext;
+    const spoofedOffscreenGetContext = function getContext(type){
+      const ctx = originalOffscreenGetContext.apply(this, arguments);
+      if (type && String(type).toLowerCase().includes('webgl')) return patchContext(ctx);
+      return ctx;
+    };
+    Object.defineProperty(spoofedOffscreenGetContext, 'name', { value: 'getContext', configurable: true });
     Object.defineProperty(OffscreenCanvas.prototype, 'getContext', {
-      value: function(type){
-        const ctx = originalOffscreenGetContext.apply(this, arguments);
-        if (type && String(type).toLowerCase().includes('webgl')) return patchContext(ctx);
-        return ctx;
-      }, writable:false, configurable:false
+      value: spoofedOffscreenGetContext, writable: true, configurable: true
     });
   }
 })();

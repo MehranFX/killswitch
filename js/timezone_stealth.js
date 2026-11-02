@@ -90,30 +90,13 @@
     }
     window.__ks_simple_timezone_patched__ = true;
     
-    // Function to inject timezone spoofing into MAIN world via external script
+    // Dispatch timezone spoofing update to MAIN world via CustomEvent without injecting DOM script elements
     function injectTimezoneSpoof(tz, offset) {
         try {
-            // Remove any existing timezone scripts
-            const existingScripts = document.querySelectorAll('script[id^="ks-timezone-inject"]');
-            existingScripts.forEach(script => script.remove());
-            
-            // Create script element with external source and unique ID
-            const script = document.createElement('script');
-            script.id = 'ks-timezone-inject-' + Date.now();
-            script.src = chrome.runtime.getURL('js/timezone_inject_main.js') + '#tz=' + encodeURIComponent(tz) + '&offset=' + offset;
-            
-            // Inject into document
-            (document.documentElement || document.head || document.body).appendChild(script);
-            
-            // Remove script after execution to keep DOM clean
-            script.addEventListener('load', () => {
-                setTimeout(() => script.remove(), 100);
-            });
-            
-            // Inject external script for MAIN world
-        } catch (e) {
-            console.error('[KS Timezone] Error injecting external script:', e);
-        }
+            window.dispatchEvent(new CustomEvent('__ks_timezone_sync__', {
+                detail: { timezone: tz, offset: offset }
+            }));
+        } catch (e) {}
     }
     
     // Don't apply spoofing immediately with default UTC - wait for storage load

@@ -36,42 +36,28 @@
     });
     
     function injectPrivacyProtections(settings) {
-        // Remove any existing privacy script
-        const existingScript = document.querySelector('script[src*="privacy_inject_main.js"]');
-        if (existingScript) {
-            existingScript.remove();
-        }
-        
-        // Get IP-based geolocation from storage
+        // Get IP-based geolocation from storage and dispatch clean sync event to MAIN world
         chrome.storage.local.get(['latitude', 'longitude'], (result) => {
             const lat = result.latitude || 38.7945952;  // Default: Denver, Colorado
             const lng = result.longitude || -106.5348379;
             
-            // Pass individual protection settings via URL parameters
-            const protectionParams = [];
-            if (settings.canvas_protection !== false) protectionParams.push('canvas=1');
-            if (settings.webgl_protection !== false) protectionParams.push('webgl=1');
-            if (settings.audio_protection !== false) protectionParams.push('audio=1');
-            if (settings.font_protection !== false) protectionParams.push('font=1');
-            if (settings.screen_spoofing !== false) protectionParams.push('screen=1');
-            if (settings.battery_protection !== false) protectionParams.push('battery=1');
-            if (settings.memory_spoofing !== false) protectionParams.push('memory=1');
-            if (settings.hardware_spoofing !== false) protectionParams.push('hardware=1');
-            if (settings.language_spoofing !== false) protectionParams.push('language=1');
-            
-            // Create external script to inject into MAIN world with coordinates and settings
-            const script = document.createElement('script');
-            const allParams = ['lat=' + lat, 'lng=' + lng].concat(protectionParams);
-            script.src = chrome.runtime.getURL('js/privacy_inject_main.js') + '#' + allParams.join('&');
-            script.onload = function() {
-                // External privacy script loaded successfully
-                script.remove();
+            const detail = {
+                lat,
+                lng,
+                canvas: settings.canvas_protection !== false,
+                webgl: settings.webgl_protection !== false,
+                audio: settings.audio_protection !== false,
+                font: settings.font_protection !== false,
+                screen: settings.screen_spoofing !== false,
+                battery: settings.battery_protection !== false,
+                memory: settings.memory_spoofing !== false,
+                hardware: settings.hardware_spoofing !== false,
+                language: settings.language_spoofing !== false
             };
-            script.onerror = function() {
-                console.error('[KS Privacy] Failed to load external privacy script');
-            };
-            
-            (document.head || document.documentElement).appendChild(script);
+
+            try {
+                window.dispatchEvent(new CustomEvent('__ks_privacy_sync__', { detail }));
+            } catch (_) {}
         });
     }
     

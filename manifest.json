@@ -40,6 +40,20 @@
         },
         {
             "matches": ["<all_urls>"],
+            "js": ["js/privacy_inject_main.js"],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "MAIN"
+        },
+        {
+            "matches": ["<all_urls>"],
+            "js": ["js/webgl_spoofer.js"],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "MAIN"
+        },
+        {
+            "matches": ["<all_urls>"],
             "js": ["js/privacy_sync.js"],
             "run_at": "document_start",
             "all_frames": true,
@@ -51,13 +65,6 @@
             "run_at": "document_start",
             "all_frames": true,
             "world": "ISOLATED"
-        },
-        {
-            "matches": ["<all_urls>"],
-            "js": ["js/webgl_spoofer.js"],
-            "run_at": "document_start",
-            "all_frames": true,
-            "world": "MAIN"
         },
         {
             "matches": ["<all_urls>"],

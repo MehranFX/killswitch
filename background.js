@@ -852,8 +852,8 @@ class BackgroundManager {
             const now = Date.now();
             
             // Unified location, country and flag resolution
-            let country = '';
-            if (ipLocation && ipLocation.locale) {
+            let country = (ipLocation && ipLocation.country) ? ipLocation.country.toUpperCase() : '';
+            if (!country && ipLocation && ipLocation.locale) {
                 country = (ipLocation.locale.split('-')[1] || '').toUpperCase();
             }
             if (!country) {
@@ -922,6 +922,7 @@ class BackgroundManager {
             await this.setupCachedRules();
             await this.setupDeclarativeNetRequest();
             await this.setupProxyBlocking();
+            await this.enforceBlockingOnOpenTabs();
 
         } catch (error) {
             try {
@@ -931,6 +932,29 @@ class BackgroundManager {
         } finally {
             this._ipUpdateInProgress = false;
         }
+    }
+
+    /**
+     * Enforce blocking rules on currently open tabs immediately upon IP/country change
+     */
+    static async enforceBlockingOnOpenTabs() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            for (const tab of tabs) {
+                if (!tab.id || !tab.url || !/^https?:/i.test(tab.url)) continue;
+                const blockedPage = chrome.runtime.getURL('html/blocked.html');
+                if (tab.url.startsWith(blockedPage)) continue;
+
+                const shouldBlock = await this.shouldBlockURL(tab.url);
+                if (shouldBlock) {
+                    const host = URLUtils.getHostFromURL(tab.url);
+                    const targetUrl = chrome.runtime.getURL(`html/blocked.html?domain=${encodeURIComponent(host)}`);
+                    try {
+                        await chrome.tabs.update(tab.id, { url: targetUrl });
+                    } catch (_) {}
+                }
+            }
+        } catch (_) {}
     }
 
     /**
@@ -1044,6 +1068,7 @@ class BackgroundManager {
                         if (tz && lat !== undefined && lon !== undefined) {
                             return {
                                 ip: detectedIP,
+                                country: (cc || '').toUpperCase(),
                                 timezone: tz,
                                 locale: this.getLocaleFromCountryCode(cc),
                                 latitude: lat,
@@ -1061,9 +1086,11 @@ class BackgroundManager {
                 if (response.ok) {
                     const data = await response.json();
                     if (data && data.timezone) {
+                        const cc = (data.country_code || data.countryCode || '').toUpperCase();
                         return {
+                            country: cc,
                             timezone: data.timezone,
-                            locale: this.getLocaleFromCountryCode(data.country_code || data.countryCode),
+                            locale: this.getLocaleFromCountryCode(cc),
                             latitude: data.latitude,
                             longitude: data.longitude
                         };
@@ -1093,6 +1120,9 @@ class BackgroundManager {
             'FI': 'fi-FI', 'PL': 'pl-PL', 'CZ': 'cs-CZ', 'HU': 'hu-HU',
             'RO': 'ro-RO', 'BG': 'bg-BG', 'HR': 'hr-HR', 'SK': 'sk-SK',
             'SI': 'sl-SI', 'LT': 'lt-LT', 'LV': 'lv-LV', 'EE': 'et-ET',
+            'RS': 'sr-RS', 'ME': 'sr-ME', 'BA': 'bs-BA', 'MK': 'mk-MK',
+            'AL': 'sq-AL', 'IS': 'is-IS', 'IE': 'en-IE', 'NZ': 'en-NZ',
+            'ZA': 'en-ZA', 'GR': 'el-GR', 'PT': 'pt-PT', 'LU': 'fr-LU',
             'UA': 'uk-UA', 'BY': 'be-BY', 'KZ': 'kk-KZ', 'UZ': 'uz-UZ',
             'AZ': 'az-AZ', 'GE': 'ka-GE', 'AM': 'hy-AM', 'KG': 'ky-KG',
             'TJ': 'tg-TJ', 'TM': 'tk-TM', 'MN': 'mn-MN', 'NP': 'ne-NP',
@@ -1120,7 +1150,11 @@ class BackgroundManager {
             'MP': 'en-MP', 'VI': 'en-VI', 'PR': 'es-PR', 'AS': 'en-AS',
             'GU': 'en-GU', 'MP': 'en-MP', 'VI': 'en-VI', 'PR': 'es-PR'
         };
-        return localeMap[countryCode] || 'en-US';
+        if (countryCode && /^[A-Za-z]{2}$/.test(countryCode)) {
+            const cc = countryCode.toUpperCase();
+            return localeMap[cc] || `en-${cc}`;
+        }
+        return 'en-US';
     }
 
     /**
@@ -1570,9 +1604,7 @@ class BackgroundManager {
                 delayInMinutes: 0.5,  // 30 ثانیه تاخیر اولیه
                 periodInMinutes: 0.5  // هر 30 ثانیه تکرار
             });
-            
-            // Add a listener for when the alarm fires
-            chrome.alarms.onAlarm.addListener(this.handleAlarm.bind(this));
+            // onAlarm listener is registered synchronously at top-level (Manifest V3 requirement)
             // Log removed
         } catch (error) {
             // Error removed
@@ -2385,17 +2417,15 @@ function FindProxyForURL(url, host) {
                 });
             }
             
-            // Add exception rules for essential login resources to prevent blocking
+            // Subresource types that must be strictly blocked (not redirected)
+            const SUBRESOURCE_TYPES = [
+                'sub_frame', 'stylesheet', 'script', 'image', 'font', 'object',
+                'xmlhttprequest', 'ping', 'csp_report', 'media', 'websocket',
+                'webtransport', 'webbundle', 'other'
+            ];
+
+            // Add exception rules for essential login resources if needed (exclude ads/analytics)
             const loginExceptions = [
-                { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
-                    urlFilter: '||google-ads.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
-                }},
-                { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
-                    urlFilter: '||googletagmanager.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
-                }},
-                { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
-                    urlFilter: '||google-analytics.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
-                }},
                 { id: ruleId++, priority: 2, action: { type: 'allow' }, condition: { 
                     urlFilter: '||staticimg.com/*', resourceTypes: ['script', 'image', 'xmlhttprequest'] 
                 }},
@@ -2412,19 +2442,13 @@ function FindProxyForURL(url, host) {
                     const allowedIPsString = storedIPs[i] || '';
                     const allowedIPs = allowedIPsString.replace(/\|$/, '').split(',').filter(ip => ip.trim());
                     
-                    // Log removed
-                    // Log removed
-                    // Log removed
-                    // Log removed
-                    
                     // Check if current IP is allowed
                     const shouldBlock = this.checkIPRules(currentIP, allowedIPs);
-                    // Log removed
                     
                     if (shouldBlock) {
-                        // Create redirect rule to custom blocked page (so user always sees our page)
                         const regexFilter = URLUtils.domainToRegex(domain);
-                        const rule = {
+                        // 1. Redirect main_frame navigations to blocked.html
+                        rules.push({
                             id: ruleId++,
                             priority: 1,
                             action: {
@@ -2435,22 +2459,26 @@ function FindProxyForURL(url, host) {
                                 regexFilter: regexFilter,
                                 resourceTypes: ['main_frame']
                             }
-                        };
-                        
-                        rules.push(rule);
-                        // Log removed
-                        // Log removed
-                    } else {
-                        // Log removed
+                        });
+
+                        // 2. Block all subresources (WebSocket, Fetch/XHR, scripts, frames)
+                        rules.push({
+                            id: ruleId++,
+                            priority: 1,
+                            action: { type: 'block' },
+                            condition: {
+                                regexFilter: regexFilter,
+                                resourceTypes: SUBRESOURCE_TYPES
+                            }
+                        });
                     }
                 } catch (error) {
                     // Error removed
                 }
             }
             
-            // Also add country-based blocking rules for immediate main-frame blocking
+            // Also add country-based blocking rules
             if (countryRules && countryRules.length > 0 && currentCountry) {
-                // Log removed
                 for (const rule of countryRules) {
                     try {
                         const isCountryAllowed = (rule.countries || []).includes(currentCountry);
@@ -2469,7 +2497,12 @@ function FindProxyForURL(url, host) {
                                 action: { type: 'redirect', redirect: { extensionPath: '/html/blocked.html' } },
                                 condition: { regexFilter, resourceTypes: ['main_frame'] }
                             });
-                            // Log removed
+                            rules.push({
+                                id: ruleId++,
+                                priority: 2,
+                                action: { type: 'block' },
+                                condition: { regexFilter, resourceTypes: SUBRESOURCE_TYPES }
+                            });
 
                             // Special handling for *.bingx.com: include related domains that BingX uses
                             if (rule.domain === '*.bingx.com') {
@@ -2487,11 +2520,14 @@ function FindProxyForURL(url, host) {
                                         action: { type: 'redirect', redirect: { extensionPath: '/html/blocked.html' } },
                                         condition: { regexFilter: r, resourceTypes: ['main_frame'] }
                                     });
-                                    // Log removed
+                                    rules.push({
+                                        id: ruleId++,
+                                        priority: 2,
+                                        action: { type: 'block' },
+                                        condition: { regexFilter: r, resourceTypes: SUBRESOURCE_TYPES }
+                                    });
                                 }
                             }
-                        } else {
-                            // Log removed
                         }
                     } catch (e) {
                         // Warning removed
